@@ -15,9 +15,10 @@ A Discord bot that monitors Magic Garden shop inventory and sends "in stock" not
 - **Slash commands** with autocomplete:
   - `/subscribe <item>` — watch an item for stock alerts
   - `/unsubscribe <item>` — stop watching an item
-  - `/watchlist` — view your subscriptions with current stock status
+  - `/watchlist` — view your subscriptions with stock status
   - `/stock [shop]` — browse current shop inventory
-  - `/restock` — see time until next restock for each shop
+  - `/restock` — see time until next restock
+  - `/setup-stock-board` — create a live stock board for your server
 - **Batched notifications** — one DM per restock event, not per item
 - **SQLite persistence** — subscriptions survive restarts
 - **Auto-reconnect** — recovers from WebSocket disconnects
@@ -88,6 +89,7 @@ internal/mg/shop.go            Shop state management, patch application
 internal/notify/engine.go      Matches stock events to subscriptions
 internal/discord/bot.go        Discord session, slash commands, autocomplete
 internal/discord/embeds.go     Rich embed builders for all responses
+internal/discord/board.go      Live stock board management
 internal/store/sqlite.go       SQLite subscription persistence
 ```
 
