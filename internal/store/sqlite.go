@@ -1,0 +1,125 @@
+package store
+
+import (
+	"database/sql"
+	"fmt"
+	"strings"
+
+	_ "modernc.org/sqlite"
+)
+
+// Store manages subscription persistence.
+type Store struct {
+	db *sql.DB
+}
+
+// Subscription represents a user's item subscription.
+type Subscription struct {
+	ID       int64
+	UserID   string
+	GuildID  string
+	ItemID   string
+	ShopType string
+}
+
+// New opens or creates a SQLite database at the given path.
+func New(path string) (*Store, error) {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, fmt.Errorf("open db: %w", err)
+	}
+
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+
+	return &Store{db: db}, nil
+}
+
+func migrate(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS subscriptions (
+			id        INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id   TEXT NOT NULL,
+			guild_id  TEXT NOT NULL DEFAULT '',
+			item_id   TEXT NOT NULL,
+			shop_type TEXT NOT NULL,
+			UNIQUE(user_id, item_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_subscriptions_item ON subscriptions(item_id);
+	`)
+	return err
+}
+
+// Subscribe adds a subscription for a user. Returns false if already subscribed.
+func (s *Store) Subscribe(userID, guildID, itemID, shopType string) (bool, error) {
+	itemID = strings.ToLower(itemID)
+	res, err := s.db.Exec(
+		`INSERT OR IGNORE INTO subscriptions (user_id, guild_id, item_id, shop_type) VALUES (?, ?, ?, ?)`,
+		userID, guildID, itemID, shopType,
+	)
+	if err != nil {
+		return false, fmt.Errorf("insert subscription: %w", err)
+	}
+	rows, _ := res.RowsAffected()
+	return rows > 0, nil
+}
+
+// Unsubscribe removes a subscription for a user. Returns false if not found.
+func (s *Store) Unsubscribe(userID, itemID string) (bool, error) {
+	itemID = strings.ToLower(itemID)
+	res, err := s.db.Exec(
+		`DELETE FROM subscriptions WHERE user_id = ? AND item_id = ?`,
+		userID, itemID,
+	)
+	if err != nil {
+		return false, fmt.Errorf("delete subscription: %w", err)
+	}
+	rows, _ := res.RowsAffected()
+	return rows > 0, nil
+}
+
+// GetUserSubscriptions returns all subscriptions for a user.
+func (s *Store) GetUserSubscriptions(userID string) ([]Subscription, error) {
+	rows, err := s.db.Query(
+		`SELECT id, user_id, guild_id, item_id, shop_type FROM subscriptions WHERE user_id = ? ORDER BY shop_type, item_id`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query subscriptions: %w", err)
+	}
+	defer rows.Close()
+	return scanSubscriptions(rows)
+}
+
+// GetSubscribersForItem returns all user IDs subscribed to a given item.
+func (s *Store) GetSubscribersForItem(itemID string) ([]Subscription, error) {
+	itemID = strings.ToLower(itemID)
+	rows, err := s.db.Query(
+		`SELECT id, user_id, guild_id, item_id, shop_type FROM subscriptions WHERE item_id = ?`,
+		itemID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query subscribers: %w", err)
+	}
+	defer rows.Close()
+	return scanSubscriptions(rows)
+}
+
+// Close closes the database.
+func (s *Store) Close() error {
+	return s.db.Close()
+}
+
+func scanSubscriptions(rows *sql.Rows) ([]Subscription, error) {
+	var subs []Subscription
+	for rows.Next() {
+		var sub Subscription
+		if err := rows.Scan(&sub.ID, &sub.UserID, &sub.GuildID, &sub.ItemID, &sub.ShopType); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		subs = append(subs, sub)
+	}
+	return subs, rows.Err()
+}
