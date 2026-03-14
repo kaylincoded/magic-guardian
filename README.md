@@ -91,6 +91,17 @@ internal/discord/embeds.go     Rich embed builders for all responses
 internal/store/sqlite.go       SQLite subscription persistence
 ```
 
+## Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [📖 Architecture](./docs/architecture.md) | Component diagrams, data flow, concurrency model |
+| [🔌 API Contracts](./docs/api-contracts.md) | Slash commands, message components, event callbacks |
+| [🗃️ Data Models](./docs/data-models.md) | Database schema, Go types, protocol structures |
+| [🛠️ Development Guide](./docs/development-guide.md) | Setup, coding conventions, testing, deployment |
+
+Or browse the [full documentation index](./docs/index.md).
+
 ## How It Works
 
 1. Connects to `wss://magicgarden.gg` as an anonymous player
