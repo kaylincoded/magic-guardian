@@ -2,3 +2,16 @@
 *.db
 /magic-guardian
 /dist/
+
+# AI/IDE configs
+.claude/
+.opencode/
+.windsurf/
+
+# BMAD workflow system
+_bmad/
+_bmad-output/
+
+# Debug builds
+*-debug
+magic-guardian-linux
