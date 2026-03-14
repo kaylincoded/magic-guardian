@@ -49,18 +49,18 @@ A Discord bot that monitors Magic Garden shop inventory and sends "in stock" not
 
 ### Configuration
 
-Copy `.env.example` to `.env` and fill in your values:
+Copy `.env.example` to `.env` and add your Discord credentials:
 
 ```bash
 cp .env.example .env
 ```
 
-| Variable | Description | Default |
-|---|---|---|
-| `DISCORD_TOKEN` | Bot token from Discord Developer Portal | *required* |
-| `DISCORD_APP_ID` | Application ID from Discord Developer Portal | *required* |
-| `MG_ROOM_ID` | Magic Garden room ID to monitor | `8TP8` |
-| `MG_VERSION` | Game client version | `117` |
+| Variable | Description |
+|----------|-------------|
+| `DISCORD_TOKEN` | Bot token from Discord Developer Portal |
+| `DISCORD_APP_ID` | Application ID from Discord Developer Portal |
+
+> The bot auto-discovers the game version and room on startup. No manual config needed.
 
 ### Build & Run
 
