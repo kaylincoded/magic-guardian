@@ -1,284 +1,188 @@
 # Magic Guardian - Architecture
 
-## High-Level Architecture
+## Overview
+
+Service-oriented backend with event-driven architecture. The bot maintains a persistent WebSocket connection to Magic Garden, processes inventory changes, and dispatches notifications via Discord.
+
+## Component Diagram
 
 ```
-                                    ┌─────────────────────────────────────┐
-                                    │      Magic Garden WebSocket         │
-                                    │         (wss://magicgarden.gg)      │
-                                    └─────────────────┬───────────────────┘
-                                                      │
-                                                      │ WebSocket
-                                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           magic-guardian Bot                                 │
-│                                                                              │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                     internal/mg (WebSocket Layer)                    │    │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │    │
-│  │  │   Client     │  │   ShopState  │  │   Message Types          │  │    │
-│  │  │  (connect,   │  │  (in-memory  │  │   - ServerMessage        │  │    │
-│  │  │   heartbeat, │  │   inventory  │  │   - WelcomeState         │  │    │
-│  │  │   reconnect) │  │   caching)   │  │   - Patch (JSON Patch)   │  │    │
-│  │  └──────┬───────┘  └──────┬───────┘  └──────────────────────────┘  │    │
-│  │         │                 │                                            │    │
-│  │         └────────┬────────┘                                            │    │
-│  │                  │                                                     │    │
-│  │         ┌────────▼────────┐                                            │    │
-│  │         │  Event Callbacks │                                           │    │
-│  │         │ - OnRestock      │                                           │    │
-│  │         │ - OnStockChange  │                                           │    │
-│  │         │ - OnConnect      │                                           │    │
-│  │         └────────┬────────┘                                            │    │
-│  └──────────────────┼─────────────────────────────────────────────────────┘    │
-│                     │                                                          │
-│         ┌───────────┼───────────┐                                            │
-│         │           │           │                                            │
-│         ▼           ▼           ▼                                            │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────────────────┐          │
-│  │   notify/   │ │  discord/   │ │           store/                 │          │
-│  │   Engine    │ │   Bot       │ │          SQLite                  │          │
-│  │             │ │             │ │                                  │          │
-│  │  - Match    │ │  - Slash    │ │  ┌────────────────────────────┐  │          │
-│  │    subs to  │ │    commands │ │  │      subscriptions         │  │          │
-│  │    changes  │ │  - DM sends │ │  │      (user_id, item_id)     │  │          │
-│  │  - Batch    │ │  - Board    │ │  └────────────────────────────┘  │          │
-│  │    alerts   │ │    updates  │ │  ┌────────────────────────────┐  │          │
-│  └─────────────┘ └──────┬──────┘ │  │      board_messages        │  │          │
-│                         │        │  │      (guild, channel, msg) │  │          │
-│                         │        │  └────────────────────────────┘  │          │
-│                         │        └──────────────────────────────────┘          │
-│                         │                                                       │
-│                         ▼                                                       │
-│              ┌──────────────────────┐                                          │
-│              │   Discord API        │                                          │
-│              │   (discordgo)        │                                          │
-│              └──────────────────────┘                                          │
-└─────────────────────────────────────────────────────────────────────────────┘
+                                    ┌─────────────────────────────┐
+                                    │   Magic Garden WebSocket    │
+                                    │      wss://magicgarden.gg   │
+                                    └─────────────┬───────────────┘
+                                                  │
+                                                  │ WebSocket
+                                                  ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          magic-guardian Bot                              │
+│                                                                          │
+│  ┌─────────────────────┐        ┌─────────────────────────────────────┐ │
+│  │   mg/Client         │◄───────│       Event Callbacks              │ │
+│  │  • Connection mgmt  │        │ • OnRestock → notify.Engine        │ │
+│  │  • Heartbeat        │        │ • OnStockChange → Board.Update     │ │
+│  │  • Reconnect        │        │ • OnConnect → Board.Update         │ │
+│  │  • State management │        └─────────────────────────────────────┘ │
+│  └──────────┬──────────┘                                              │
+│             │                                                         │
+│  ┌──────────┴──────────┐                                              │
+│  │   ShopState         │                                              │
+│  │  (RWMutex protected)│                                              │
+│  └──────────┬──────────┘                                              │
+└─────────────┼──────────────────────────────────────────────────────────┘
+              │
+      ┌───────┼───────┬───────────────┐
+      │       │       │               │
+      ▼       ▼       ▼               ▼
+┌────────┐ ┌────────┐ ┌─────────────────────────────┐
+│ notify │ │discord │ │          store/              │
+│Engine  │ │ Bot    │ │         SQLite              │
+│        │ │        │ │                              │
+│• Match │ │• CMDS  │ │ • subscriptions table       │
+│• Batch │ │• DMs   │ │ • board_messages table      │
+│• Alert │ │• Boards│ │                              │
+└────────┘ └────┬───┘ └──────────────────────────────┘
+                │
+                ▼
+         ┌──────────────┐
+         │ Discord API  │
+         └──────────────┘
 ```
 
-## Component Architecture
+## Components
 
 ### Entry Point (`cmd/magic-guardian/main.go`)
 
-The main function orchestrates initialization:
+Wires all components together:
 
-1. Loads environment variables from `.env`
-2. Discovers Magic Garden version and room ID
-3. Initializes SQLite store (`store.New()`)
-4. Creates MG WebSocket client (`mg.NewClient()`)
-5. Creates Discord bot (`discord.NewBot()`)
-6. Creates notification engine (`notify.NewEngine()`)
-7. Wires event callbacks between components
-8. Starts Discord bot and MG client concurrently
-9. Waits for shutdown signal (SIGINT/SIGTERM)
+1. Loads `.env` config
+2. Discovers MG version/room
+3. Initializes SQLite store
+4. Creates MG WebSocket client
+5. Creates Discord bot
+6. Creates notification engine
+7. Wires event callbacks
+8. Starts Discord + WebSocket clients
+9. Waits for SIGINT/SIGTERM
 
 ```go
-// Dependency wiring
 mgClient := mg.NewClient(cfg, logger)
 bot, _ := discord.NewBot(token, appID, db, mgClient.State(), logger)
 engine := notify.NewEngine(db, bot, logger)
 
-// Event callbacks
 mgClient.OnRestock(engine.HandleRestocks)
-mgClient.OnStockChange(func(changes) { bot.Board().UpdateAllBoards() })
+mgClient.OnStockChange(func(ch) { bot.Board().UpdateAllBoards() })
 mgClient.OnConnect(func() { bot.Board().UpdateAllBoards() })
 ```
 
 ### WebSocket Layer (`internal/mg/`)
 
-The `mg` package handles all communication with the Magic Garden server.
-
-#### Client (`client.go`)
-
-- Manages WebSocket connection lifecycle
-- Implements auto-reconnect with exponential backoff
-- Sends heartbeat every 2 seconds
-- Handles server pings with pong responses
-- Authenticates as anonymous player before connecting
-- Dispatches messages to handlers
-
-**Connection Flow:**
-```
-DiscoverParams() → authenticate() → Dial() → sendJoinMessages() → heartbeat()
-```
-
-**Reconnect Strategy:**
-- Exponential backoff: 2s base + random jitter up to 60s max
-- Rediscovered room/version on each reconnect
-
-#### Shop State (`shop.go`)
-
-Thread-safe in-memory representation of all shop inventory.
-
-- `ShopState` - RWMutex-protected map of shop_type → Shop
-- `Shop` - Contains inventory array and restock timer
-- `ShopItem` - Individual item with stock count
-- Supports `ApplyPatches()` for JSON Patch updates
-- Returns immutable copies via `GetShop()` / `GetAllShops()`
+| File | Responsibility |
+|------|----------------|
+| `client.go` | Connection, heartbeat (2s), reconnect (2-60s backoff) |
+| `shop.go` | ShopState with RWMutex, ApplyPatches() |
+| `messages.go` | Protocol types (ServerMessage, Patch, WelcomeState) |
+| `discover.go` | HTTP discovery of version and room ID |
 
 **JSON Patch Paths:**
 - Inventory: `/child/data/shops/{shop}/inventory/{index}/initialStock`
 - Timer: `/child/data/shops/{shop}/secondsUntilRestock`
 
-#### Message Types (`messages.go`)
-
-Protocol structures for server-client communication:
-
-- `ServerMessage` - Type envelope (Welcome, PartialState, Config)
-- `WelcomeState` - Full state on connection
-- `Patch` - RFC 6902 JSON Patch operation
-- `Shop` / `ShopItem` - Data models
-
-#### Discovery (`discover.go`)
-
-Fetches current game version and room ID:
-
-- Makes HTTP request to magicgarden.gg
-- Extracts version from HTML/scripts (regex: `version/(\d+)`)
-- Extracts room ID from redirect or HTML (regex: `/r/([A-Za-z0-9]+)`)
-
 ### Discord Layer (`internal/discord/`)
 
-The `discord` package handles all Discord interactions.
-
-#### Bot (`bot.go`)
-
-Manages Discord session, slash commands, and interactions.
+| File | Responsibility |
+|------|----------------|
+| `bot.go` | Session, slash commands, interactions |
+| `embeds.go` | Rich embed builders (stock alerts, inventory) |
+| `board.go` | Live stock board management |
 
 **Slash Commands:**
+
 | Command | Description | Options |
 |---------|-------------|---------|
-| `/subscribe` | Get notified when item is in stock | `item` (required, autocomplete) |
-| `/unsubscribe` | Stop notifications for item | `item` (required, autocomplete) |
+| `/subscribe` | Get notified when item is in stock | `item` (autocomplete) |
+| `/unsubscribe` | Stop notifications for item | `item` (autocomplete) |
 | `/watchlist` | Show current subscriptions | - |
-| `/stock` | Show current shop inventory | `shop` (seed/tool/egg/decor) |
+| `/stock` | Show shop inventory | `shop` (seed/tool/egg/decor) |
 | `/restock` | Show time until next restock | - |
-| `/setup-stock-board` | Create live stock board channel | `name` (optional) |
+| `/setup-stock-board` | Create live stock board | `name` (optional) |
 
-**Interaction Handlers:**
-- Application commands (slash commands)
-- Autocomplete requests (item suggestions)
-- Message components (buttons, select menus)
+### Notification Engine (`internal/notify/engine.go`)
 
-#### Embeds (`embeds.go`)
+Matches stock changes to subscriptions and batches alerts.
 
-Rich embed builders for all bot responses:
+**Batching Logic:** All items that restock at once → one DM per user
 
-- `BuildStockAlertEmbed()` - DM notification for restocks
-- `BuildStockEmbed()` - Shop inventory display
-- `BuildWatchlistEmbed()` - User subscription list
-- `BuildRestockEmbed()` - Restock timer display
-
-#### Board (`board.go`)
-
-Live stock board management for server channels.
-
-**Board Structure:**
-- Category channel: "📦 Magic Garden Stock"
-- 4 text channels: one per shop type
-- Each channel has embed + "Update Subscriptions" button
-
-**Features:**
-- Real-time embed updates on stock changes
-- Select menus for bulk subscription management
-- Ephemeral responses for user privacy
-- Per-guild configuration persistence
-
-### Notification Engine (`internal/notify/`)
-
-Matches stock changes against user subscriptions.
-
-#### Engine (`engine.go`)
-
-- `HandleRestocks()` - Processes batched stock changes
-- Groups alerts by subscribed user
-- Sends one DM per restock event (not per item)
-- Uses `store.GetSubscribersForItem()` to find subscribers
-
-**Notification Batching:**
 ```go
-// All items that restock at once → single DM per user
-userAlerts[userID] = append(userAlerts[userID], ch)
-e.sender.SendStockAlert(userID, alerts)
+HandleRestocks(changes)
+├── Group changes by itemID
+├── For each item:
+│   └── GetSubscribersForItem(itemID)
+├── Group subscribers by userID
+└── For each user:
+    └── SendStockAlert(userID, batchedChanges)
 ```
 
-### Persistence Layer (`internal/store/`)
+### Persistence (`internal/store/sqlite.go`)
 
-SQLite storage for subscriptions and board configurations.
+| Operation | Returns |
+|-----------|---------|
+| `Subscribe(user, guild, item, shop)` | `bool` (created vs existing) |
+| `Unsubscribe(user, item)` | `bool` (found vs not found) |
+| `GetUserSubscriptions(user)` | `[]Subscription` |
+| `GetSubscribersForItem(item)` | `[]Subscription` |
+| `GetBoardConfig(guild)` | `*BoardConfig` |
+| `GetAllBoardConfigs()` | `[]BoardConfig` |
 
-#### Store (`sqlite.go`)
+## Concurrency
 
-**Schema:**
-```sql
-CREATE TABLE subscriptions (
-    id        INTEGER PRIMARY KEY,
-    user_id   TEXT NOT NULL,
-    guild_id  TEXT NOT NULL DEFAULT '',
-    item_id   TEXT NOT NULL,
-    shop_type TEXT NOT NULL,
-    UNIQUE(user_id, item_id)
-);
-
-CREATE TABLE board_messages (
-    guild_id   TEXT NOT NULL,
-    channel_id TEXT NOT NULL,
-    shop_type  TEXT NOT NULL,
-    message_id TEXT NOT NULL,
-    PRIMARY KEY(guild_id, shop_type)
-);
-```
-
-**Key Operations:**
-- `Subscribe(user, guild, item, shop)` - Add subscription
-- `Unsubscribe(user, item)` - Remove subscription
-- `UnsubscribeAll(user)` - Clear all subscriptions
-- `GetUserSubscriptions(user)` - List user's subs
-- `GetSubscribersForItem(item)` - Find item watchers
-- `GetBoardConfig(guild)` / `GetAllBoardConfigs()` - Board management
+| Component | Model |
+|-----------|-------|
+| WebSocket reader | Separate goroutine |
+| Heartbeat | Separate goroutine (2s interval) |
+| ShopState | RWMutex for thread-safe access |
+| Board timestamps | Periodic ticker (1 minute) |
+| Discord events | Handled in discordgo's goroutine |
 
 ## Data Flow
 
-### Restock Notification Flow
+### Restock Notification
 
 ```
-1. WebSocket receives PartialState patch
-2. ShopState.ApplyPatches() detects 0→N stock change
-3. Client calls onRestock callback
-4. notify.Engine.HandleRestocks() receives changes
-5. For each changed item:
-   - store.GetSubscribersForItem(itemID)
-   - Group subscribers by user
-6. For each user:
-   - bot.SendStockAlert(userID, batchedChanges)
-   - Discord DM with embed + unsubscribe buttons
-7. Subscribers receive DM notification
+WebSocket → PartialState patch
+    ↓
+ShopState.ApplyPatches() detects 0→N change
+    ↓
+OnRestock callback → notify.Engine
+    ↓
+store.GetSubscribersForItem(itemID)
+    ↓
+For each subscriber:
+    bot.SendStockAlert(userID, batchedChanges)
+    ↓
+Discord DM with embed + unsubscribe buttons
 ```
 
-### Stock Board Update Flow
+### Stock Board Update
 
 ```
-1. WebSocket receives patch (any change)
-2. ShopState.ApplyPatches() processes patch
-3. Client calls onStockChange callback
-4. bot.Board().UpdateAllBoards() triggered
-5. For each configured guild:
-   - Load board config from store
-   - Rebuild embed with current inventory
-   - Edit channel message
+WebSocket → Any patch
+    ↓
+ShopState.ApplyPatches()
+    ↓
+OnStockChange callback → Board.UpdateAllBoards()
+    ↓
+store.GetAllBoardConfigs()
+    ↓
+For each guild/shop:
+    ChannelMessageEditComplex(newEmbed)
 ```
-
-## Concurrency Model
-
-- **WebSocket reader**: Separate goroutine, reads messages
-- **Heartbeat**: Separate goroutine, sends pings
-- **ShopState**: RWMutex for thread-safe access
-- **Board updates**: Periodic ticker (every minute for timestamps)
-- **Discord session**: Handles events in discordgo's goroutine
 
 ## Error Handling
 
-- **WebSocket disconnect**: Auto-reconnect with backoff
-- **Discord API errors**: Logged, minimal impact
-- **Database errors**: Logged, operation fails gracefully
-- **Interaction acknowledgment**: Deferred response as fallback
+| Scenario | Behavior |
+|----------|----------|
+| WebSocket disconnect | Auto-reconnect with exponential backoff |
+| Discord API error | Logged, minimal impact |
+| Database error | Logged, operation fails gracefully |
+| Interaction timeout | Deferred response as fallback |

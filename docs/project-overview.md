@@ -71,12 +71,18 @@ magic-guardian/
 
 ## Policy Compliance
 
-This bot is fully compliant with the [Magic Garden Modding Policy](https://magicgarden.gg):
+> [!IMPORTANT]
+> This bot is designed to comply with Magic Garden's bot policy. It operates as a **read-only observer** — connects anonymously, receives shop data, and does nothing else.
 
-- Operates as anonymous observer (no authentication)
-- Read-only - never sends game commands
-- Does not interact with game objects
-- Does not automate purchasing or gameplay
+> [!NOTE]
+> **Policy compliance means:**
+>
+> - Operates as anonymous observer (no authentication)
+> - Read-only — never sends game commands
+> - Does not interact with game objects
+> - Does not automate purchasing or gameplay
+>
+> **Official policy:** [Magic Circle Discord](https://discord.com/invite/magiccircle) | [Bot & Tool Policy](https://ptb.discord.com/channels/808935495543160852/1428205518278885457) (Discord login required)
 
 ## Performance Characteristics
 
