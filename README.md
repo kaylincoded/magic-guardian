@@ -23,6 +23,44 @@ A Discord bot that monitors Magic Garden shop inventory and sends "in stock" not
 - **SQLite persistence** — subscriptions survive restarts
 - **Auto-reconnect** — recovers from WebSocket disconnects
 
+## Installation
+
+Pre-built binaries are available on the [releases page](https://github.com/kaylincoded/magic-guardian/releases).
+
+1. **Download** the appropriate binary for your platform:
+
+| Platform | Command |
+|----------|---------|
+| Linux amd64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-linux-amd64` |
+| Linux arm64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-linux-arm64` |
+| macOS Intel | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-darwin-amd64` |
+| macOS Apple Silicon | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-darwin-arm64` |
+| Windows | [Download from releases page](https://github.com/kaylincoded/magic-guardian/releases) |
+
+2. **Make executable** (Linux/macOS):
+   ```bash
+   chmod +x magic-guardian-*
+   ```
+
+3. **Configure** credentials in `.env`:
+   > [!IMPORTANT]
+   > Get your credentials from the [Discord Developer Portal](https://discord.com/developers/home)
+   >
+   > - `DISCORD_TOKEN` — Bot token (Bot → Reset Token → Copy)
+   > - `DISCORD_APP_ID` — Application ID (General Information → Application ID)
+   >
+   ```bash
+   DISCORD_TOKEN=your_bot_token_here
+   DISCORD_APP_ID=your_app_id_here
+   ```
+
+4. **Run**:
+   ```bash
+   ./magic-guardian-linux-amd64
+   ```
+
+Or [build from source](#setup) for the latest features.
+
 ## Policy Compliance
 
 > [!IMPORTANT]
