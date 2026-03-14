@@ -23,43 +23,70 @@ A Discord bot that monitors Magic Garden shop inventory and sends "in stock" not
 - **SQLite persistence** — subscriptions survive restarts
 - **Auto-reconnect** — recovers from WebSocket disconnects
 
-## Installation
+## Getting Started
+
+> [!IMPORTANT]
+> You need valid credentials from the [Discord Developer Portal](https://discord.com/developers/home) before getting started:
+> - `DISCORD_TOKEN` — Bot → Reset Token → Copy
+> - `DISCORD_APP_ID` — General Information → Application ID
+
+Choose how you want to run the bot:
+
+---
+
+### Option A: Download Binary (Recommended)
 
 Pre-built binaries are available on the [releases page](https://github.com/kaylincoded/magic-guardian/releases).
-> [!IMPORTANT]
-> You will need valid credentials from the [Discord Developer Portal](https://discord.com/developers/home) before getting started.
->
 
-1. **Download** the appropriate binary for your platform:
-
-| Platform | Command |
-|----------|---------|
+| Platform | Download Command |
+|----------|------------------|
 | Linux amd64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-linux-amd64` |
 | Linux arm64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-linux-arm64` |
 | macOS Intel | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-darwin-amd64` |
 | macOS Apple Silicon | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-darwin-arm64` |
 | Windows | [Download from releases page](https://github.com/kaylincoded/magic-guardian/releases) |
 
-2. **Make executable** (Linux/macOS):
-   ```bash
-   chmod +x magic-guardian-*
-   ```
+Then configure and run:
 
-3. **Configure** credentials in `.env`:
-   ```bash
-   DISCORD_TOKEN=your_bot_token_here
-   DISCORD_APP_ID=your_app_id_here
-   ```
-   
-   > - `DISCORD_TOKEN` — Bot token (Bot → Reset Token → Copy)
-   > - `DISCORD_APP_ID` — Application ID (General Information → Application ID)
+```bash
+# Make executable (Linux/macOS)
+chmod +x magic-guardian-*
 
-4. **Run**:
-   ```bash
-   ./magic-guardian-linux-amd64
-   ```
+# Configure credentials
+echo "DISCORD_TOKEN=your_bot_token_here" > .env
+echo "DISCORD_APP_ID=your_app_id_here" >> .env
 
-Or [build from source](#setup) for the latest features.
+# Run
+./magic-guardian-linux-amd64
+```
+
+---
+
+### Option B: Build from Source
+
+```bash
+# Clone and build
+git clone https://github.com/kaylincoded/magic-guardian.git
+cd magic-guardian
+go build -o magic-guardian ./cmd/magic-guardian/
+
+# Configure and run
+echo "DISCORD_TOKEN=your_bot_token_here" > .env
+echo "DISCORD_APP_ID=your_app_id_here" >> .env
+./magic-guardian
+```
+
+---
+
+### Invite the Bot
+
+Use this URL template (replace `APP_ID`):
+
+```
+https://discord.com/oauth2/authorize?client_id=APP_ID&scope=bot+applications.commands&permissions=2048
+```
+
+Permissions needed: **Manage Channels, Manage Messages, Embed Links, View Channel, Read Message History** (93200)
 
 ## Policy Compliance
 
@@ -77,43 +104,6 @@ Or [build from source](#setup) for the latest features.
 > - Being transparent about what it does
 >
 > **Official policy:** [Magic Circle Discord](https://discord.com/invite/magiccircle) | [Bot & Tool Policy](https://ptb.discord.com/channels/808935495543160852/1428205518278885457/1428205518278885457) (Discord login required)
-
-## Setup
-
-### Prerequisites
-
-- Go 1.25+
-- A Discord bot token ([Discord Developer Portal](https://discord.com/developers/applications))
-
-### Configuration
-
-Copy `.env.example` to `.env` and add your Discord credentials:
-
-```bash
-cp .env.example .env
-```
-
-| Variable | Description |
-|----------|-------------|
-| `DISCORD_TOKEN` | Bot token from Discord Developer Portal |
-| `DISCORD_APP_ID` | Application ID from Discord Developer Portal |
-
-### Build & Run
-
-```bash
-go build -o magic-guardian ./cmd/magic-guardian/
-./magic-guardian
-```
-
-### Invite the Bot
-
-Use this URL template to invite the bot to your server (replace `APP_ID`):
-
-```
-https://discord.com/oauth2/authorize?client_id=APP_ID&scope=bot+applications.commands&permissions=2048
-```
-
-Permissions needed: **Manage Channels, Manage Messages, Embed Links, View Channel, Read Message History** (93200)
 
 ## Architecture
 
