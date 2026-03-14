@@ -4,6 +4,8 @@
   <img src="magic-guardian.png" alt="Magic Guardian Bot" width="400">
 </div>
 
+<br>
+
 A Discord bot that monitors Magic Garden shop inventory and sends "in stock" notifications to subscribed users.
 
 ## Features
