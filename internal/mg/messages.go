@@ -42,6 +42,7 @@ type QuinoData struct {
 type Shop struct {
 	Inventory           []ShopItem `json:"inventory"`
 	SecondsUntilRestock float64    `json:"secondsUntilRestock"`
+	RestockCycle        float64    `json:"-"` // full cycle length in seconds, set after first timer reset
 }
 
 // ShopItem represents an item in a shop's inventory.

@@ -62,8 +62,18 @@ func main() {
 	// Initialize notification engine
 	engine := notify.NewEngine(db, bot, logger.With("component", "notify"))
 
-	// Wire the restock callback
+	// Wire the restock callback (DM alerts for 0→N)
 	mgClient.OnRestock(engine.HandleRestocks)
+
+	// Wire the stock change callback (board updates for any change)
+	mgClient.OnStockChange(func(changes []mg.StockChange) {
+		bot.Board().UpdateAllBoards()
+	})
+
+	// Refresh boards on every connect/reconnect with fresh state
+	mgClient.OnConnect(func() {
+		bot.Board().UpdateAllBoards()
+	})
 
 	// Start Discord bot
 	if err := bot.Start(); err != nil {

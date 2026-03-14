@@ -37,6 +37,13 @@ func New(path string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
+// BoardConfig stores the stock board channel and message IDs for a guild.
+type BoardConfig struct {
+	GuildID  string
+	Channels map[string]string // shop_type -> channel_id
+	Messages map[string]string // shop_type -> message_id
+}
+
 func migrate(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS subscriptions (
@@ -48,6 +55,13 @@ func migrate(db *sql.DB) error {
 			UNIQUE(user_id, item_id)
 		);
 		CREATE INDEX IF NOT EXISTS idx_subscriptions_item ON subscriptions(item_id);
+		CREATE TABLE IF NOT EXISTS board_messages (
+			guild_id   TEXT NOT NULL,
+			channel_id TEXT NOT NULL,
+			shop_type  TEXT NOT NULL,
+			message_id TEXT NOT NULL,
+			PRIMARY KEY(guild_id, shop_type)
+		);
 	`)
 	return err
 }
@@ -80,6 +94,19 @@ func (s *Store) Unsubscribe(userID, itemID string) (bool, error) {
 	return rows > 0, nil
 }
 
+// UnsubscribeAll removes all subscriptions for a user. Returns the count removed.
+func (s *Store) UnsubscribeAll(userID string) (int64, error) {
+	res, err := s.db.Exec(
+		`DELETE FROM subscriptions WHERE user_id = ?`,
+		userID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("delete all subscriptions: %w", err)
+	}
+	rows, _ := res.RowsAffected()
+	return rows, nil
+}
+
 // GetUserSubscriptions returns all subscriptions for a user.
 func (s *Store) GetUserSubscriptions(userID string) ([]Subscription, error) {
 	rows, err := s.db.Query(
@@ -105,6 +132,74 @@ func (s *Store) GetSubscribersForItem(itemID string) ([]Subscription, error) {
 	}
 	defer rows.Close()
 	return scanSubscriptions(rows)
+}
+
+// SetBoardMessage stores a board message ID for a guild/shop.
+func (s *Store) SetBoardMessage(guildID, channelID, shopType, messageID string) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO board_messages (guild_id, channel_id, shop_type, message_id) VALUES (?, ?, ?, ?)`,
+		guildID, channelID, shopType, messageID,
+	)
+	return err
+}
+
+// GetBoardConfig returns the board config for a guild.
+func (s *Store) GetBoardConfig(guildID string) (*BoardConfig, error) {
+	rows, err := s.db.Query(
+		`SELECT channel_id, shop_type, message_id FROM board_messages WHERE guild_id = ?`, guildID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cfg := &BoardConfig{GuildID: guildID, Channels: make(map[string]string), Messages: make(map[string]string)}
+	for rows.Next() {
+		var channelID, shopType, messageID string
+		if err := rows.Scan(&channelID, &shopType, &messageID); err != nil {
+			return nil, err
+		}
+		cfg.Channels[shopType] = channelID
+		cfg.Messages[shopType] = messageID
+	}
+	if len(cfg.Messages) == 0 {
+		return nil, nil
+	}
+	return cfg, rows.Err()
+}
+
+// GetAllBoardConfigs returns board configs for all guilds.
+func (s *Store) GetAllBoardConfigs() ([]BoardConfig, error) {
+	rows, err := s.db.Query(`SELECT guild_id, channel_id, shop_type, message_id FROM board_messages`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byGuild := make(map[string]*BoardConfig)
+	for rows.Next() {
+		var guildID, channelID, shopType, messageID string
+		if err := rows.Scan(&guildID, &channelID, &shopType, &messageID); err != nil {
+			return nil, err
+		}
+		if _, ok := byGuild[guildID]; !ok {
+			byGuild[guildID] = &BoardConfig{GuildID: guildID, Channels: make(map[string]string), Messages: make(map[string]string)}
+		}
+		byGuild[guildID].Channels[shopType] = channelID
+		byGuild[guildID].Messages[shopType] = messageID
+	}
+
+	var configs []BoardConfig
+	for _, cfg := range byGuild {
+		configs = append(configs, *cfg)
+	}
+	return configs, rows.Err()
+}
+
+// DeleteBoardConfig removes board config for a guild.
+func (s *Store) DeleteBoardConfig(guildID string) error {
+	_, err := s.db.Exec(`DELETE FROM board_messages WHERE guild_id = ?`, guildID)
+	return err
 }
 
 // Close closes the database.

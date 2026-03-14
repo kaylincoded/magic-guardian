@@ -35,6 +35,15 @@ func BuildStockAlertEmbed(changes []mg.StockChange) *discordgo.MessageEmbed {
 		grouped[ch.ShopType] = append(grouped[ch.ShopType], ch)
 	}
 
+	// DEBUG: Log what we're building
+	fmt.Printf("[DEBUG] BuildStockAlertEmbed: Total changes=%d\n", len(changes))
+	for shopType, items := range grouped {
+		fmt.Printf("[DEBUG] Building field for %s shop with %d items\n", shopType, len(items))
+		for _, item := range items {
+			fmt.Printf("[DEBUG]   - %s: x%d\n", mg.FormatItemName(item.Item.ItemID()), item.NewStock)
+		}
+	}
+
 	for shopType, items := range grouped {
 		emoji := shopEmoji[shopType]
 		var lines []string
@@ -42,11 +51,13 @@ func BuildStockAlertEmbed(changes []mg.StockChange) *discordgo.MessageEmbed {
 			name := mg.FormatItemName(item.Item.ItemID())
 			lines = append(lines, fmt.Sprintf("**%s** — x%d", name, item.NewStock))
 		}
-		fields = append(fields, &discordgo.MessageEmbedField{
+		field := &discordgo.MessageEmbedField{
 			Name:   fmt.Sprintf("%s %s Shop", emoji, cases.Title(language.English).String(shopType)),
 			Value:  strings.Join(lines, "\n"),
 			Inline: false,
-		})
+		}
+		fields = append(fields, field)
+		fmt.Printf("[DEBUG] Created %s field with %d items, value length=%d\n", shopType, len(items), len(field.Value))
 	}
 
 	return &discordgo.MessageEmbed{
@@ -58,6 +69,62 @@ func BuildStockAlertEmbed(changes []mg.StockChange) *discordgo.MessageEmbed {
 			Text: "magic-guardian • quality of life for Magic Garden",
 		},
 	}
+}
+
+// buildDMUnsubButtons creates action rows with per-item unsubscribe buttons
+// (only for items in the alert) plus a red "Stop all notifications" button.
+// Discord allows max 5 action rows with max 5 buttons each.
+func buildDMUnsubButtons(changes []mg.StockChange) []discordgo.MessageComponent {
+	// Deduplicate items (same item could appear in multiple changes)
+	seen := make(map[string]bool)
+	var buttons []discordgo.MessageComponent
+	for _, ch := range changes {
+		itemID := ch.Item.ItemID()
+		if seen[itemID] {
+			continue
+		}
+		seen[itemID] = true
+		name := mg.FormatItemName(itemID)
+		buttons = append(buttons, discordgo.Button{
+			Label:    fmt.Sprintf("Unsubscribe from %s", name),
+			Style:    discordgo.SecondaryButton,
+			CustomID: fmt.Sprintf("dm_unsub_%s", itemID),
+		})
+	}
+
+	// Discord limits: 5 action rows, 5 buttons per row.
+	// Reserve the last row for the Stop All button if we have many items.
+	maxItemButtons := 19 // 4 rows × 5 buttons = 20, minus 1 for stop-all in 5th row
+	if len(buttons) > maxItemButtons {
+		buttons = buttons[:maxItemButtons]
+	}
+
+	var rows []discordgo.MessageComponent
+	for i := 0; i < len(buttons); i += 5 {
+		end := i + 5
+		if end > len(buttons) {
+			end = len(buttons)
+		}
+		rows = append(rows, discordgo.ActionsRow{Components: buttons[i:end]})
+	}
+
+	// Add the Stop All button in its own row
+	rows = append(rows, discordgo.ActionsRow{
+		Components: []discordgo.MessageComponent{
+			discordgo.Button{
+				Label:    "Stop all notifications",
+				Style:    discordgo.DangerButton,
+				CustomID: "dm_unsub_all",
+			},
+		},
+	})
+
+	// Cap at 5 action rows total
+	if len(rows) > 5 {
+		rows = rows[:5]
+	}
+
+	return rows
 }
 
 // BuildStockEmbed creates a rich embed showing current shop inventory.

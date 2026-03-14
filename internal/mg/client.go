@@ -29,12 +29,14 @@ type ClientConfig struct {
 
 // Client manages the WebSocket connection to the Magic Garden server.
 type Client struct {
-	cfg       ClientConfig
-	state     *ShopState
-	conn      *websocket.Conn
-	connMu    sync.Mutex
-	onRestock func([]StockChange)
-	logger    *slog.Logger
+	cfg           ClientConfig
+	state         *ShopState
+	conn          *websocket.Conn
+	connMu        sync.Mutex
+	onRestock     func([]StockChange)
+	onStockChange func([]StockChange)
+	onConnect     func()
+	logger        *slog.Logger
 }
 
 // NewClient creates a new MG WebSocket client.
@@ -46,9 +48,19 @@ func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
 	}
 }
 
-// OnRestock registers a callback for stock change events.
+// OnRestock registers a callback for restock events (0 → N).
 func (c *Client) OnRestock(fn func([]StockChange)) {
 	c.onRestock = fn
+}
+
+// OnStockChange registers a callback for ANY stock change.
+func (c *Client) OnStockChange(fn func([]StockChange)) {
+	c.onStockChange = fn
+}
+
+// OnConnect registers a callback that fires after every successful Welcome.
+func (c *Client) OnConnect(fn func()) {
+	c.onConnect = fn
 }
 
 // State returns the current shop state.
@@ -57,10 +69,20 @@ func (c *Client) State() *ShopState {
 }
 
 // Run connects to the server and processes messages until ctx is cancelled.
-// It automatically reconnects on disconnect.
+// It automatically reconnects on disconnect, re-discovering fresh room params each time.
 func (c *Client) Run(ctx context.Context) error {
 	for {
-		err := c.connectAndListen(ctx)
+		// Re-discover version and room on every connect (rooms expire quickly)
+		version, roomID, err := DiscoverParams(ctx)
+		if err != nil {
+			c.logger.Warn("failed to discover params, using last known", "error", err)
+		} else {
+			c.cfg.Version = version
+			c.cfg.RoomID = roomID
+			c.logger.Info("discovered MG params", "version", version, "room", roomID)
+		}
+
+		err = c.connectAndListen(ctx)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -134,11 +156,12 @@ func (c *Client) connectAndListen(ctx context.Context) error {
 	defer heartbeatCancel()
 	go c.heartbeat(heartbeatCtx, conn)
 
-	// Read messages
+	// Read messages (30s deadline resets on each message; server pings every ~5s)
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		_, raw, err := conn.ReadMessage()
 		if err != nil {
 			return fmt.Errorf("read: %w", err)
@@ -165,6 +188,9 @@ func (c *Client) handleMessage(raw []byte) {
 	case "Welcome":
 		c.handleWelcome(msg.FullState)
 	case "PartialState":
+		if len(msg.Patches) > 0 {
+			c.logger.Debug("partial state", "patches", len(msg.Patches), "first", msg.Patches[0].Path)
+		}
 		c.handlePartialState(msg.Patches)
 	case "Config":
 		c.logger.Debug("received config message")
@@ -185,6 +211,9 @@ func (c *Client) handleWelcome(raw json.RawMessage) {
 		return
 	}
 
+	// Snapshot old state before overwriting so we can diff
+	oldShops := c.state.GetAllShops()
+
 	c.state.SetFromWelcome(state.Child.Data.Shops)
 
 	totalItems := 0
@@ -204,6 +233,62 @@ func (c *Client) handleWelcome(raw json.RawMessage) {
 		)
 	}
 	c.logger.Info("shop state initialized", "totalItems", totalItems)
+
+	// Always refresh boards with current state
+	if c.onConnect != nil {
+		c.onConnect()
+	}
+
+	// Diff old vs new state — fire callbacks if stock changed
+	if len(oldShops) > 0 {
+		changes := diffShopState(oldShops, state.Child.Data.Shops)
+		if len(changes) > 0 {
+			c.logger.Info("stock changed on reconnect", "changes", len(changes))
+
+			if c.onStockChange != nil {
+				c.onStockChange(changes)
+			}
+
+			var restocks []StockChange
+			for _, ch := range changes {
+				if ch.NewStock > 0 {
+					restocks = append(restocks, ch)
+				}
+			}
+			if len(restocks) > 0 && c.onRestock != nil {
+				c.onRestock(restocks)
+			}
+		}
+	}
+}
+
+// diffShopState compares two shop snapshots and returns stock changes.
+func diffShopState(old, new map[string]*Shop) []StockChange {
+	var changes []StockChange
+	for shopType, newShop := range new {
+		oldShop, ok := old[shopType]
+		if !ok {
+			continue
+		}
+		// Build index of old items by ID
+		oldStock := make(map[string]int)
+		for _, item := range oldShop.Inventory {
+			oldStock[item.ItemID()] = item.InitialStock
+		}
+		for _, item := range newShop.Inventory {
+			id := item.ItemID()
+			prev := oldStock[id]
+			if prev != item.InitialStock {
+				changes = append(changes, StockChange{
+					ShopType: shopType,
+					Item:     item,
+					OldStock: prev,
+					NewStock: item.InitialStock,
+				})
+			}
+		}
+	}
+	return changes
 }
 
 func (c *Client) handlePartialState(patches []Patch) {
@@ -226,6 +311,12 @@ func (c *Client) handlePartialState(patches []Patch) {
 		}
 	}
 
+	// Notify board updater about all changes
+	if c.onStockChange != nil {
+		c.onStockChange(changes)
+	}
+
+	// Notify DM engine about restocks only
 	if len(restocks) > 0 && c.onRestock != nil {
 		c.onRestock(restocks)
 	}

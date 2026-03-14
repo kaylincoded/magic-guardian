@@ -19,6 +19,7 @@ type Bot struct {
 	mgState *mg.ShopState
 	logger  *slog.Logger
 	appID   string
+	board   *Board
 }
 
 // NewBot creates and configures a new Discord bot.
@@ -35,6 +36,8 @@ func NewBot(token, appID string, st *store.Store, mgState *mg.ShopState, logger 
 		logger:  logger,
 		appID:   appID,
 	}
+
+	b.board = NewBoard(session, st, mgState, logger.With("component", "board"), appID)
 
 	session.AddHandler(b.handleInteraction)
 
@@ -101,6 +104,19 @@ func (b *Bot) Start() error {
 			Name:        "restock",
 			Description: "Show time until next restock for each shop",
 		},
+		{
+			Name:                     "setup-stock-board",
+			Description:              "Create a live stock board channel with subscribe menus",
+			DefaultMemberPermissions: &adminPerm,
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "name",
+					Description: "Category name (default: 📦 Magic Garden Stock)",
+					Required:    false,
+				},
+			},
+		},
 	}
 
 	_, err := b.session.ApplicationCommandBulkOverwrite(b.appID, "", commands)
@@ -121,14 +137,37 @@ func (b *Bot) Session() *discordgo.Session {
 	return b.session
 }
 
-// SendStockAlert sends a DM to a user with stock alert information.
+// SendStockAlert sends a DM to a user with stock alert information
+// and per-item unsubscribe buttons + a "stop all" button.
 func (b *Bot) SendStockAlert(userID string, changes []mg.StockChange) error {
+	// DEBUG: Log what we're about to send
+	fmt.Printf("[DEBUG] SendStockAlert: user=%s, changes=%d\n", userID, len(changes))
+	for _, ch := range changes {
+		fmt.Printf("[DEBUG]   - %s %s: x%d\n", ch.ShopType, mg.FormatItemName(ch.Item.ItemID()), ch.NewStock)
+	}
+
 	ch, err := b.session.UserChannelCreate(userID)
 	if err != nil {
 		return fmt.Errorf("create DM channel: %w", err)
 	}
 	embed := BuildStockAlertEmbed(changes)
-	_, err = b.session.ChannelMessageSendEmbed(ch.ID, embed)
+
+	// DEBUG: Log embed details
+	fmt.Printf("[DEBUG] Embed has %d fields\n", len(embed.Fields))
+	for i, field := range embed.Fields {
+		fmt.Printf("[DEBUG]   Field %d: %s - %d chars\n", i, field.Name, len(field.Value))
+	}
+
+	components := buildDMUnsubButtons(changes)
+	_, err = b.session.ChannelMessageSendComplex(ch.ID, &discordgo.MessageSend{
+		Embeds:     []*discordgo.MessageEmbed{embed},
+		Components: components,
+	})
+	if err != nil {
+		fmt.Printf("[DEBUG] Discord send error: %v\n", err)
+	} else {
+		fmt.Printf("[DEBUG] Discord send successful\n")
+	}
 	return err
 }
 
@@ -142,12 +181,48 @@ func interactionUserID(i *discordgo.InteractionCreate) string {
 	return ""
 }
 
+var adminPerm int64 = discordgo.PermissionManageChannels
+
+// Board returns the board manager for external callers.
+func (b *Bot) Board() *Board {
+	return b.board
+}
+
 func (b *Bot) handleInteraction(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// Defer a fallback acknowledgment in case the handler doesn't respond in time
+	acknowledged := false
+	defer func() {
+		if !acknowledged {
+			b.logger.Warn("interaction was not acknowledged by handler, sending fallback")
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Something went wrong. Please try again.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
+	}()
+
 	switch i.Type {
 	case discordgo.InteractionApplicationCommand:
 		b.handleCommand(s, i)
+		acknowledged = true
 	case discordgo.InteractionApplicationCommandAutocomplete:
 		b.handleAutocomplete(s, i)
+		acknowledged = true
+	case discordgo.InteractionMessageComponent:
+		customID := i.MessageComponentData().CustomID
+		if strings.HasPrefix(customID, "dm_unsub_") {
+			b.handleDMUnsub(s, i)
+		} else if strings.HasPrefix(customID, "board_update_") {
+			b.board.HandleUpdateButton(s, i)
+		} else if strings.HasPrefix(customID, "update_sub_") {
+			b.board.HandleUpdateSubscriptions(s, i)
+		} else {
+			b.board.HandleSelectMenu(s, i)
+		}
+		acknowledged = true
 	}
 }
 
@@ -164,6 +239,8 @@ func (b *Bot) handleCommand(s *discordgo.Session, i *discordgo.InteractionCreate
 		b.cmdStock(s, i)
 	case "restock":
 		b.cmdRestock(s, i)
+	case "setup-stock-board":
+		b.cmdSetupStockBoard(s, i)
 	}
 }
 
@@ -321,6 +398,43 @@ func (b *Bot) respondEmbed(s *discordgo.Session, i *discordgo.InteractionCreate,
 	})
 }
 
+func (b *Bot) cmdSetupStockBoard(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if i.GuildID == "" {
+		b.respond(s, i, "❌ This command can only be used in a server.")
+		return
+	}
+
+	// Defer the response since channel creation takes a moment
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags: discordgo.MessageFlagsEphemeral,
+		},
+	})
+
+	categoryName := "📦 Magic Garden Stock"
+	if opts := i.ApplicationCommandData().Options; len(opts) > 0 {
+		categoryName = opts[0].StringValue()
+	}
+
+	channelID, err := b.board.SetupBoard(i.GuildID, categoryName)
+	if err != nil {
+		b.logger.Error("setup-stock-board failed", "error", err)
+		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: strPtr("❌ Failed to create stock board. Make sure I have Manage Channels permission."),
+		})
+		return
+	}
+
+	s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+		Content: strPtr(fmt.Sprintf("✅ Stock board created! Check <#%s>", channelID)),
+	})
+}
+
+func strPtr(s string) *string {
+	return &s
+}
+
 // resolveItem finds the canonical item ID and shop type from user input.
 func (b *Bot) resolveItem(input string) (itemID string, shopType string) {
 	inputLower := strings.ToLower(input)
@@ -345,6 +459,10 @@ func (b *Bot) handleAutocomplete(s *discordgo.Session, i *discordgo.InteractionC
 		}
 	}
 	if focused == nil {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+			Data: &discordgo.InteractionResponseData{Choices: nil},
+		})
 		return
 	}
 
@@ -382,10 +500,68 @@ func (b *Bot) handleAutocomplete(s *discordgo.Session, i *discordgo.InteractionC
 		}
 	}
 
-	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
 		Data: &discordgo.InteractionResponseData{
 			Choices: choices,
+		},
+	}); err != nil {
+		b.logger.Error("autocomplete respond failed", "error", err)
+	}
+}
+
+func (b *Bot) handleDMUnsub(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	userID := interactionUserID(i)
+	customID := i.MessageComponentData().CustomID
+
+	if customID == "dm_unsub_all" {
+		count, err := b.store.UnsubscribeAll(userID)
+		if err != nil {
+			b.logger.Error("dm unsub all failed", "error", err)
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "❌ Something went wrong.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			return
+		}
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("🗑️ Removed all **%d** subscriptions. You won't receive any more alerts.", count),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
+	// dm_unsub_<itemID>
+	itemID := strings.TrimPrefix(customID, "dm_unsub_")
+	removed, err := b.store.Unsubscribe(userID, itemID)
+	if err != nil {
+		b.logger.Error("dm unsub failed", "error", err)
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ Something went wrong.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
+	name := mg.FormatItemName(itemID)
+	msg := fmt.Sprintf("🗑️ Unsubscribed from **%s**.", name)
+	if !removed {
+		msg = fmt.Sprintf("ℹ️ You weren't subscribed to **%s**.", name)
+	}
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: msg,
+			Flags:   discordgo.MessageFlagsEphemeral,
 		},
 	})
 }
