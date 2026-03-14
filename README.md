@@ -43,16 +43,16 @@ Pre-built binaries are available on the [releases page](https://github.com/kayli
    ```
 
 3. **Configure** credentials in `.env`:
+   ```bash
+   DISCORD_TOKEN=your_bot_token_here
+   DISCORD_APP_ID=your_app_id_here
+   ```
+
    > [!IMPORTANT]
    > Get your credentials from the [Discord Developer Portal](https://discord.com/developers/home)
    >
    > - `DISCORD_TOKEN` — Bot token (Bot → Reset Token → Copy)
    > - `DISCORD_APP_ID` — Application ID (General Information → Application ID)
-   >
-   ```bash
-   DISCORD_TOKEN=your_bot_token_here
-   DISCORD_APP_ID=your_app_id_here
-   ```
 
 4. **Run**:
    ```bash
