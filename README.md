@@ -24,29 +24,26 @@ A Discord bot that monitors Magic Garden shop inventory and sends "in stock" not
 
 ## Policy Compliance
 
-This bot is designed to comply with Magic Garden's bot policy. It operates as a **read-only observer** — it connects anonymously, receives shop data, and does nothing else. No automation, no buying, no game actions.
+> [!IMPORTANT]
+> This bot is designed to comply with Magic Garden's bot policy. It operates as a **read-only observer** — it connects anonymously, receives shop data, and does nothing else. No automation, no buying, no game actions.
 
----
-
-### What does "policy-compliant" mean?
-
-Magic Garden allows third-party tools that respect their boundaries. This bot makes a best-effort attempt to comply by:
-
-- Never sending game commands or automating player actions
-- Connecting as an anonymous observer (no authenticated player session)
-- Only reading shop inventory data — never interacting with game objects
-- Being transparent about what it does
-
-**Magic Garden's official policy** is documented in their community Discord:
-
-- [Magic Circle Discord Server](https://discord.com/invite/magiccircle)
-- [Bot & Tool Policy](https://ptb.discord.com/channels/808935495543160852/1428205518278885457/1428205518278885457) (requires Discord login)
+> [!NOTE]
+> **What does "policy-compliant" mean?**
+>
+> Magic Garden allows third-party tools that respect their boundaries. This bot makes a best-effort attempt to comply by:
+>
+> - Never sending game commands or automating player actions
+> - Connecting as an anonymous observer (no authenticated player session)
+> - Only reading shop inventory data — never interacting with game objects
+> - Being transparent about what it does
+>
+> **Official policy:** [Magic Circle Discord](https://discord.com/invite/magiccircle) | [Bot & Tool Policy](https://ptb.discord.com/channels/808935495543160852/1428205518278885457/1428205518278885457) (Discord login required)
 
 ## Setup
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.25+
 - A Discord bot token ([Discord Developer Portal](https://discord.com/developers/applications))
 
 ### Configuration
