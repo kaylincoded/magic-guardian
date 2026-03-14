@@ -23,6 +23,12 @@ A Discord bot that monitors Magic Garden shop inventory and sends "in stock" not
 - **SQLite persistence** — subscriptions survive restarts
 - **Auto-reconnect** — recovers from WebSocket disconnects
 
+## Screenshots
+
+| Watchlist | Stock Alert |
+|-----------|-------------|
+| ![Watchlist](./watchlist.png) | ![Stock Alert](./stockalert.png) |
+
 ## Getting Started
 
 > [!IMPORTANT]
