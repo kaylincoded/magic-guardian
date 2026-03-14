@@ -1,6 +1,10 @@
 # magic-guardian
 
-A policy-compliant Discord bot that monitors Magic Garden shop inventory and sends "in stock" notifications to subscribed users.
+<div align="center">
+  <img src="magic-guardian.png" alt="Magic Guardian Bot" width="400">
+</div>
+
+A Discord bot that monitors Magic Garden shop inventory and sends "in stock" notifications to subscribed users.
 
 ## Features
 
@@ -18,7 +22,23 @@ A policy-compliant Discord bot that monitors Magic Garden shop inventory and sen
 
 ## Policy Compliance
 
-This bot is **read-only**. It connects as an anonymous player, receives shop state updates, and does nothing else. No automation, no buying, no game actions. Fully compliant with the [Magic Garden Modding Policy](https://magicgarden.gg).
+This bot is designed to comply with Magic Garden's bot policy. It operates as a **read-only observer** — it connects anonymously, receives shop data, and does nothing else. No automation, no buying, no game actions.
+
+---
+
+### What does "policy-compliant" mean?
+
+Magic Garden allows third-party tools that respect their boundaries. This bot makes a best-effort attempt to comply by:
+
+- Never sending game commands or automating player actions
+- Connecting as an anonymous observer (no authenticated player session)
+- Only reading shop inventory data — never interacting with game objects
+- Being transparent about what it does
+
+**Magic Garden's official policy** is documented in their community Discord:
+
+- [Magic Circle Discord Server](https://discord.com/invite/magiccircle)
+- [Bot & Tool Policy](https://ptb.discord.com/channels/808935495543160852/1428205518278885457/1428205518278885457) (requires Discord login)
 
 ## Setup
 
