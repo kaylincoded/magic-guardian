@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/kaylin/magic-guardian/internal/mg"
+	"github.com/kaylincoded/magic-guardian/internal/mg"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )

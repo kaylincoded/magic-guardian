@@ -8,10 +8,10 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
-	"github.com/kaylin/magic-guardian/internal/discord"
-	"github.com/kaylin/magic-guardian/internal/mg"
-	"github.com/kaylin/magic-guardian/internal/notify"
-	"github.com/kaylin/magic-guardian/internal/store"
+	"github.com/kaylincoded/magic-guardian/internal/discord"
+	"github.com/kaylincoded/magic-guardian/internal/mg"
+	"github.com/kaylincoded/magic-guardian/internal/notify"
+	"github.com/kaylincoded/magic-guardian/internal/store"
 )
 
 func main() {

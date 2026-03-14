@@ -20,7 +20,7 @@
 ### 1. Clone and Navigate
 
 ```bash
-git clone https://github.com/kaylin/magic-guardian.git
+git clone https://github.com/kaylincoded/magic-guardian.git
 cd magic-guardian
 ```
 

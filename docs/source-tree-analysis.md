@@ -3,7 +3,7 @@
 ## Project Root Structure
 
 ```
-magic-guardian/                          # Module: github.com/kaylin/magic-guardian
+magic-guardian/                          # Module: github.com/kaylincoded/magic-guardian
 ├── cmd/                                 # Entry points
 │   └── magic-guardian/
 │       └── main.go                      # → Entry point (main package)

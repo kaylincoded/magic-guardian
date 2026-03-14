@@ -4,8 +4,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kaylin/magic-guardian/internal/mg"
-	"github.com/kaylin/magic-guardian/internal/store"
+	"github.com/kaylincoded/magic-guardian/internal/mg"
+	"github.com/kaylincoded/magic-guardian/internal/store"
 )
 
 // AlertSender is the interface for sending alerts to users.

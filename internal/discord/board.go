@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/kaylin/magic-guardian/internal/mg"
-	"github.com/kaylin/magic-guardian/internal/store"
+	"github.com/kaylincoded/magic-guardian/internal/mg"
+	"github.com/kaylincoded/magic-guardian/internal/store"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
