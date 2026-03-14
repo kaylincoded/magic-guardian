@@ -60,8 +60,6 @@ cp .env.example .env
 | `DISCORD_TOKEN` | Bot token from Discord Developer Portal |
 | `DISCORD_APP_ID` | Application ID from Discord Developer Portal |
 
-> The bot auto-discovers the game version and room on startup. No manual config needed.
-
 ### Build & Run
 
 ```bash
