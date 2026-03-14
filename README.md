@@ -75,7 +75,7 @@ Use this URL template to invite the bot to your server (replace `APP_ID`):
 https://discord.com/oauth2/authorize?client_id=APP_ID&scope=bot+applications.commands&permissions=2048
 ```
 
-Permissions needed: **Send Messages** (2048)
+Permissions needed: **Manage Channels, Manage Messages, Embed Links, View Channel, Read Message History** (93200)
 
 ## Architecture
 
