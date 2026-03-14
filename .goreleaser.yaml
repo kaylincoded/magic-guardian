@@ -1,0 +1,91 @@
+# .goreleaser.yaml
+# GitHub Releases configuration for magic-guardian
+
+# Visit https://goreleaser.com for detailed documentation.
+
+project_name: magic-guardian
+
+before:
+  hooks:
+    # Generate version info
+    - go mod download
+
+builds:
+  - id: magic-guardian
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+    ignore:
+      - goos: darwin
+        goarch: amd64
+      # Skip ARM64 on darwin/windows for simplicity
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Tag }}
+      - -X main.date={{ .Date }}
+    binary: magic-guardian
+    main: ./cmd/magic-guardian/
+    env:
+      - CGO_ENABLED=1
+      # sqlite driver needs proper CGO settings
+      - CGO_CFLAGS=-O2 -pipe
+
+  - id: magic-guardian-arm64
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Tag }}
+      - -X main.date={{ .Date }}
+    binary: magic-guardian
+    main: ./cmd/magic-guardian/
+    env:
+      - CGO_ENABLED=1
+      - CGO_CFLAGS=-O2 -pipe
+
+archives:
+  - id: default
+    name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
+    format: zip
+    files:
+      - .env.example
+      - README.md
+    replacements:
+      darwin: macOS
+      linux: Linux
+      windows: Windows
+
+release:
+  github:
+    owner: kaylincoded
+    name: magic-guardian
+  draft: true
+  header: |
+    ## Installation
+    1. Download the zip for your platform
+    2. Extract: `unzip magic-guardian_*.zip` (or double-click on Windows)
+    3. Copy `.env.example` to `.env` and add your Discord credentials
+    4. Run: `./magic-guardian` (Linux/macOS) or `magic-guardian.exe` (Windows)
+
+    See [README](https://github.com/kaylincoded/magic-guardian/blob/main/README.md) for full setup instructions.
+
+checksum:
+  name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}_checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^refactor:"
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+  version_template: "{{ .Tag }}-next-{{ .ShortCommit }}"
