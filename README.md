@@ -27,7 +27,7 @@ A Discord bot that monitors Magic Garden shop inventory and sends "in stock" not
 
 Pre-built binaries are available on the [releases page](https://github.com/kaylincoded/magic-guardian/releases).
 > [!IMPORTANT]
-> Get your credentials from the [Discord Developer Portal](https://discord.com/developers/home)
+> You will need valid credentials from the [Discord Developer Portal](https://discord.com/developers/home) before getting started.
 >
 
 1. **Download** the appropriate binary for your platform:
