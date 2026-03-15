@@ -105,6 +105,12 @@ echo "DISCORD_APP_ID=your_app_id_here" >> .env
 
 ### Option B: Android
 
+<div align="center">
+  <img src="android-mg-demo.png" alt="Magic Guardian Android App" width="300">
+</div>
+
+<br>
+
 1. Download `magic-guardian-android.apk` from the [releases page](https://github.com/kaylincoded/magic-guardian/releases)
 2. On your Android device, enable **Install from unknown sources** in Settings
 3. Open the APK to install
