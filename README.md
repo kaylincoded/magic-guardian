@@ -80,12 +80,12 @@ Pre-built binaries are available on the [releases page](https://github.com/kayli
 
 | Platform | Download Command |
 |----------|------------------|
-| Linux amd64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-linux-amd64` |
-| Linux arm64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-linux-arm64` |
-| macOS Intel | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-darwin-amd64` |
-| macOS Apple Silicon | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-darwin-arm64` |
-| Windows | [Download from releases page](https://github.com/kaylincoded/magic-guardian/releases) |
-| Android (APK) | [Download from releases page](https://github.com/kaylincoded/magic-guardian/releases) |
+| Linux amd64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.0/magic-guardian-linux-amd64` |
+| Linux arm64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.0/magic-guardian-linux-arm64` |
+| macOS Intel | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.0/magic-guardian-darwin-amd64` |
+| macOS Apple Silicon | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.0/magic-guardian-darwin-arm64` |
+| Windows | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.0/magic-guardian-windows-amd64.exe` |
+| Android (APK) | [Download from releases page](https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.0/magic-guardian-android.apk) |
 
 Then configure and run:
 
