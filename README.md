@@ -83,6 +83,7 @@ Pre-built binaries are available on the [releases page](https://github.com/kayli
 | macOS Intel | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-darwin-amd64` |
 | macOS Apple Silicon | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.1.0/magic-guardian-darwin-arm64` |
 | Windows | [Download from releases page](https://github.com/kaylincoded/magic-guardian/releases) |
+| Android (APK) | [Download from releases page](https://github.com/kaylincoded/magic-guardian/releases) |
 
 Then configure and run:
 
