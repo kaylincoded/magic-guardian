@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Magic Guardian</string>
+    <string name="notification_channel_name">Magic Guardian Service</string>
+    <string name="notification_channel_description">Keeps the Magic Guardian bot running in the background</string>
+</resources>

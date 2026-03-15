@@ -2,9 +2,10 @@
 
 ## Database Overview
 
-Magic Guardian uses SQLite for persistent storage with two primary tables:
+Magic Guardian uses SQLite for persistent storage with three tables:
 - `subscriptions` - User watchlist data
 - `board_messages` - Stock board configuration
+- `config` - Key-value settings (web UI mode)
 
 Database file: `magic-guardian.db` (created on first run)
 
@@ -81,6 +82,35 @@ CREATE TABLE board_messages (
 - `guild_id` → Discord server
 - `channel_id` → Discord text channel
 - `shop_type` → Shop in ShopState
+
+---
+
+### Config Table
+
+Stores key-value settings for the web UI mode.
+
+```sql
+CREATE TABLE config (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);
+```
+
+**Known Keys:**
+
+| Key | Description |
+|-----|-------------|
+| `discord_token` | Discord bot token |
+| `app_id` | Discord application ID |
+| `start_on_boot` | `"true"` or `"false"` -- auto-start bot on launch |
+
+**Storage Operations:**
+
+| Operation | Method | Returns |
+|-----------|--------|---------|
+| Get value | `GetConfig(key)` | `string, error` |
+| Set value | `SetConfig(key, value)` | `error` |
+| Get all | `GetAllConfig()` | `map[string]string, error` |
 
 ---
 

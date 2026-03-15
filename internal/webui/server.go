@@ -100,12 +100,23 @@ func (s *Server) Start(addr string) error {
 	}
 
 	s.logger.Info("web UI server starting", "addr", addr)
+
+	// Use a channel to detect early bind failures (e.g. port already in use).
+	errCh := make(chan error, 1)
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("web UI server error", "error", err)
+			errCh <- err
 		}
 	}()
-	return nil
+
+	// Brief window to catch immediate bind failures before returning.
+	select {
+	case err := <-errCh:
+		return fmt.Errorf("web UI failed to start: %w", err)
+	case <-time.After(100 * time.Millisecond):
+		return nil
+	}
 }
 
 // Stop gracefully shuts down the HTTP server.

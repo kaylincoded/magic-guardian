@@ -1,14 +1,14 @@
 .env
 *.db
 /magic-guardian
+/magic-guardian-linux
+/magic-guardian-linux-debug
 /dist/
 
-# Android build
+# Android build artifacts
 android/.gradle/
 android/app/build/
+android/local.properties
 
-# Go build outputs
-/releases/magic-guardian-*
-*.exe
-*.so
-*.dylib
+# Allow jniLibs (cross-compiled Go binaries for Android)
+!android/app/src/main/jniLibs/**/*.so

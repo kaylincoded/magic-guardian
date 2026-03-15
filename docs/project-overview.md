@@ -21,13 +21,24 @@ Magic Guardian is a Discord bot that monitors Magic Garden game shop inventory a
 | Language | Go | 1.25 |
 | Discord API | discordgo | v0.29.0 |
 | WebSocket | gorilla/websocket | v1.5.3 |
-| Database | SQLite (modernc.org/libc) | v1.46.1 |
+| Database | SQLite (mattn/go-sqlite3) | v1.14.34 |
 | Structured Logging | slog (stdlib) | - |
 | Configuration | godotenv | v1.5.1 |
+| Text Formatting | golang.org/x/text | v0.35.0 |
+| Web UI | Embedded HTML/CSS/JS via go:embed | - |
+| Android | Kotlin 2.1.0, AGP 8.7.3, Gradle 8.11.1 | - |
+| Android SDK | compileSdk 35, minSdk 26, targetSdk 35 | - |
+| Build/Release | GoReleaser | - |
 
 ## Architecture Type
 
-Service-oriented backend with event-driven architecture. The bot operates as a continuous running service that:
+Multi-platform application with event-driven architecture. The bot supports three deployment modes:
+
+1. **Headless CLI** (default) -- reads credentials from `.env`, no UI
+2. **Web UI mode** (`-ui`) -- embedded HTTP server with REST API and dashboard
+3. **Android app** -- Kotlin wrapper running the Go binary as a foreground service
+
+Core engine behavior across all modes:
 
 1. Maintains a persistent WebSocket connection to the game server
 2. Processes incoming JSON Patch messages for inventory changes
@@ -39,24 +50,35 @@ Service-oriented backend with event-driven architecture. The bot operates as a c
 ```
 magic-guardian/
 ├── cmd/
-│   └── magic-guardian/     # Entry point and dependency injection
+│   └── magic-guardian/       # Entry point (headless + web UI modes)
 ├── internal/
-│   ├── discord/            # Discord bot, embeds, and stock board
-│   │   ├── bot.go          # Bot session and slash commands
-│   │   ├── embeds.go       # Rich embed builders
-│   │   └── board.go        # Live stock board management
-│   ├── mg/                 # Magic Garden WebSocket client
-│   │   ├── client.go       # WebSocket connection and handlers
-│   │   ├── messages.go     # Protocol message types
-│   │   ├── shop.go         # Shop state management
-│   │   └── discover.go     # Version/room discovery
-│   ├── notify/             # Notification matching engine
-│   │   └── engine.go       # Subscription matching
-│   └── store/              # SQLite persistence
-│       └── sqlite.go       # Subscription and board storage
-├── docs/                   # This documentation
-├── go.mod / go.sum         # Go modules
-└── magic-guardian.db       # SQLite database (runtime)
+│   ├── discord/              # Discord bot, embeds, and stock board
+│   │   ├── bot.go            # Bot session and slash commands
+│   │   ├── embeds.go         # Rich embed builders
+│   │   └── board.go          # Live stock board management
+│   ├── mg/                   # Magic Garden WebSocket client
+│   │   ├── client.go         # WebSocket connection and handlers
+│   │   ├── messages.go       # Protocol message types
+│   │   ├── shop.go           # Shop state management
+│   │   └── discover.go       # Version/room discovery
+│   ├── notify/               # Notification matching engine
+│   │   └── engine.go         # Subscription matching
+│   ├── store/                # SQLite persistence
+│   │   └── sqlite.go         # Subscriptions, board config, settings
+│   └── webui/                # Embedded web dashboard
+│       ├── server.go         # HTTP server, REST API, SSE logs
+│       ├── controller.go     # Bot lifecycle management
+│       ├── loghandler.go     # Multi-handler slog (stdout + web)
+│       └── static/           # Embedded assets (go:embed)
+├── android/                  # Android wrapper app (Kotlin)
+│   ├── app/src/main/
+│   │   ├── java/gg/magicguardian/  # MainActivity, GuardianService, BootReceiver
+│   │   └── jniLibs/                # Cross-compiled Go binaries
+│   └── build.gradle.kts
+├── releases/                 # Pre-built binaries and APK
+├── docs/                     # This documentation
+├── go.mod / go.sum           # Go modules
+└── magic-guardian.db         # SQLite database (runtime)
 ```
 
 ## How It Works

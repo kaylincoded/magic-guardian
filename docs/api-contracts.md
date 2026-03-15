@@ -1,6 +1,6 @@
 # Magic Guardian - API Contracts
 
-This document describes the Discord bot's slash command API and interaction patterns.
+This document describes the Discord bot's slash command API, interaction patterns, and the Web UI REST API.
 
 ## Slash Commands
 
@@ -386,3 +386,108 @@ For each guild:
   For each shop:
     ChannelMessageEditComplex(embed + button)
 ```
+
+---
+
+## Web UI REST API
+
+The web UI server (started with `-ui` flag) exposes a REST API at the configured listen address (default `127.0.0.1:8090`).
+
+### `GET /api/status`
+
+Returns current bot status.
+
+**Response:**
+```json
+{
+  "running": true,
+  "status": "running",
+  "uptime": "2h 15m",
+  "room": "8DML",
+  "version": "117",
+  "shopCount": 4
+}
+```
+
+### `GET /api/config`
+
+Returns saved configuration (token is masked).
+
+**Response:**
+```json
+{
+  "discord_token": "MTQ4...0543",
+  "app_id": "1482540440413540543",
+  "start_on_boot": "true"
+}
+```
+
+### `POST /api/config`
+
+Save Discord credentials.
+
+**Request:**
+```json
+{
+  "discord_token": "full-token-here",
+  "app_id": "1482540440413540543"
+}
+```
+
+**Response:** `{"status": "saved"}`
+
+### `POST /api/bot/start`
+
+Start the bot engine using saved credentials.
+
+**Response:** `{"status": "started"}`
+
+**Error (409):** `{"error": "bot is already running"}`
+
+### `POST /api/bot/stop`
+
+Stop the bot engine.
+
+**Response:** `{"status": "stopped"}`
+
+### `POST /api/config/boot`
+
+Toggle start-on-boot setting.
+
+**Request:** `{"enabled": true}`
+
+**Response:** `{"status": "saved"}`
+
+### `GET /api/guilds`
+
+List Discord servers the bot is in (only when running).
+
+**Response:**
+```json
+[
+  {"id": "123456789", "name": "My Server", "icon": "https://..."}
+]
+```
+
+### `POST /api/guilds/leave`
+
+Remove bot from a Discord server.
+
+**Request:** `{"guild_id": "123456789"}`
+
+**Response:** `{"status": "left"}`
+
+### `GET /api/logs`
+
+Server-Sent Events (SSE) stream of log lines.
+
+**Content-Type:** `text/event-stream`
+
+**Event format:**
+```
+data: time=2026-03-15T09:14:50.731Z level=INFO msg="web UI server starting" addr=127.0.0.1:8090
+
+data: time=2026-03-15T09:14:50.856Z level=INFO msg="magic-guardian web UI ready" url=http://127.0.0.1:8090
+```
+
+Sends buffered history on connect, then streams new lines in real time.

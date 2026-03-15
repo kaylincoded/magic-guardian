@@ -6,7 +6,7 @@
 magic-guardian/                          # Module: github.com/kaylincoded/magic-guardian
 ├── cmd/                                 # Entry points
 │   └── magic-guardian/
-│       └── main.go                      # → Entry point (main package)
+│       └── main.go                      # → Entry point (headless + web UI modes)
 ├── internal/                            # Private application code
 │   ├── discord/                         # Discord bot interface
 │   │   ├── bot.go                       # → Bot session, slash commands
@@ -19,15 +19,35 @@ magic-guardian/                          # Module: github.com/kaylincoded/magic-
 │   │   └── discover.go                  # → Version discovery
 │   ├── notify/                          # Notification matching
 │   │   └── engine.go                    # → Subscription matching
-│   └── store/                           # Persistence
-│       └── sqlite.go                    # → SQLite store
+│   ├── store/                           # Persistence
+│   │   └── sqlite.go                    # → SQLite store (subs, board, config)
+│   └── webui/                           # Web UI (ui mode only)
+│       ├── server.go                    # → HTTP server, API routes, SSE logs
+│       ├── controller.go                # → Bot lifecycle management
+│       ├── loghandler.go                # → Multi-handler slog
+│       └── static/
+│           ├── index.html               # → Single-page dashboard (go:embed)
+│           └── logo.png
+├── android/                             # Android wrapper app
+│   ├── build.gradle.kts                 # Root: AGP 8.7.3, Kotlin 2.1.0
+│   ├── settings.gradle.kts
+│   └── app/
+│       ├── build.gradle.kts             # compileSdk 35, minSdk 26
+│       └── src/main/
+│           ├── AndroidManifest.xml
+│           ├── java/gg/magicguardian/
+│           │   ├── MainActivity.kt      # → WebView → localhost:8090
+│           │   ├── GuardianService.kt   # → Foreground service
+│           │   └── BootReceiver.kt      # → Auto-start on boot
+│           ├── jniLibs/arm64-v8a/       # Cross-compiled Go binary
+│           └── res/                     # Icons, strings, themes
+├── releases/                            # Pre-built binaries + APK
 ├── docs/                                # Documentation
 ├── go.mod                               # Module: go 1.25
 ├── go.sum
-├── .env                                 # Runtime config
-├── .env.example
-├── magic-guardian                       # Compiled binary
-├── magic-guardian.db                    # SQLite database
+├── .env.example                         # Environment template
+├── .goreleaser.yaml                     # Cross-compilation config
+├── magic-guardian.db                    # SQLite database (runtime)
 └── README.md
 ```
 
@@ -35,31 +55,47 @@ magic-guardian/                          # Module: github.com/kaylincoded/magic-
 
 ### `cmd/magic-guardian/` - Application Entry Point
 
-**Purpose:** Dependency injection and application lifecycle management
+**Purpose:** Dependency injection, application lifecycle management, and mode selection
 
 **Key Responsibilities:**
-- Load configuration from environment
-- Initialize all components with dependencies
+- Parse flags (`-ui`, `-listen`, `-db`, `-auto-start`)
+- Initialize SQLite store
+- Route to headless or web UI mode
 - Wire event callbacks between components
-- Start concurrent services (Discord + WebSocket)
 - Handle graceful shutdown
 
-**Entry Point Flow:**
+**Entry Point Flow (Headless Mode):**
 ```
 main()
-├── godotenv.Load()                      # Load .env
-├── mg.DiscoverParams()                  # Get version/room
-├── store.New("magic-guardian.db")       # Open DB
-├── mg.NewClient(cfg, logger)            # Create MG client
-├── discord.NewBot()                     # Create bot
-├── notify.NewEngine()                   # Create notification engine
-├── Wire callbacks:
-│   ├── mgClient.OnRestock(engine)
-│   ├── mgClient.OnStockChange(board)
-│   └── mgClient.OnConnect(board)
-├── bot.Start()                          # Start Discord
-├── mgClient.Run(ctx)                    # Run MG client (blocking)
-└── Wait for SIGINT/SIGTERM
+├── flag.Parse()                         # Parse CLI flags
+├── store.New(dbPath)                    # Open DB
+├── runHeadlessMode(db)
+│   ├── godotenv.Load()                  # Load .env
+│   ├── mg.DiscoverParams()              # Get version/room
+│   ├── mg.NewClient(cfg, logger)        # Create MG client
+│   ├── discord.NewBot()                 # Create bot
+│   ├── notify.NewEngine()               # Create notification engine
+│   ├── Wire callbacks:
+│   │   ├── mgClient.OnRestock(engine)
+│   │   ├── mgClient.OnStockChange(board)
+│   │   └── mgClient.OnConnect(board)
+│   ├── bot.Start()                      # Start Discord
+│   ├── mgClient.Run(ctx)               # Run MG client
+│   └── Wait for SIGINT/SIGTERM
+```
+
+**Entry Point Flow (Web UI Mode):**
+```
+main()
+├── flag.Parse()                         # -ui flag set
+├── store.New(dbPath)                    # Open DB
+├── runUIMode(db, listenAddr, autoStart)
+│   ├── webui.NewController(db)          # Bot lifecycle controller
+│   ├── webui.NewServer(db, controller)  # HTTP server
+│   ├── webui.NewMultiHandler()          # Dual-output logger
+│   ├── srv.Start(listenAddr)            # Start HTTP on :8090
+│   ├── Auto-start bot (if config exists)
+│   └── Wait for SIGINT/SIGTERM
 ```
 
 **Key File:**
@@ -222,7 +258,48 @@ board_messages:
   - channel_id
   - shop_type (PK part)
   - message_id
+
+config:
+  - key (PK)           # discord_token, app_id, start_on_boot
+  - value
 ```
+
+### `internal/webui/` - Web Dashboard
+
+**Purpose:** Embedded HTTP server for browser-based bot management (ui mode only)
+
+**Subcomponents:**
+
+| File | Responsibility |
+|------|----------------|
+| `server.go` | HTTP server, API routes, SSE log streaming, embedded static assets via `go:embed` |
+| `controller.go` | Bot lifecycle: start/stop/status, wraps Discord + MG client creation |
+| `loghandler.go` | `slog.Handler` that writes to both stdout and an in-memory ring buffer with pub/sub |
+| `static/index.html` | Single-page dashboard: setup form, bot status, guild management, live logs |
+
+**Key Design Decisions:**
+- Single HTML file with inline CSS/JS (no build toolchain, works via `go:embed`)
+- Shadcn-inspired dark theme (green preset)
+- Early bind failure detection: `ListenAndServe` errors propagated within 100ms
+- SSE (Server-Sent Events) for real-time log streaming to the browser
+- Token masking: API never returns full Discord token to frontend
+
+### `android/` - Android Wrapper
+
+**Purpose:** Native Android app that runs the Go binary as a foreground service
+
+**Key Files:**
+
+| File | Responsibility |
+|------|----------------|
+| `MainActivity.kt` | Full-screen `WebView` loading `http://127.0.0.1:8090`, dark status bar theming |
+| `GuardianService.kt` | `Service` subclass; extracts `libguardian.so` via `applicationInfo.nativeLibraryDir`; launches it with `ProcessBuilder`; acquires `PARTIAL_WAKE_LOCK`; posts foreground notification |
+| `BootReceiver.kt` | `BroadcastReceiver` for `BOOT_COMPLETED`; starts `GuardianService` on device boot |
+
+**Build Configuration:**
+- `GOOS=android GOARCH=arm64` with NDK clang for CGO (sqlite3)
+- Go binary compiled as PIE executable (not c-shared), renamed to `libguardian.so` for Android packaging
+- `useLegacyPackaging = true` keeps `.so` uncompressed in the APK
 
 ## Critical Paths
 
@@ -288,12 +365,14 @@ respond with embed
 
 ```
 main.go
-├── discord.NewBot()
+├── discord.NewBot()            # Headless mode
 │   ├── discord.Board.NewBoard()
 │   └── discordgo.New()
-├── mg.NewClient()
-├── notify.NewEngine()
-└── store.New()
+├── mg.NewClient()              # Headless mode
+├── notify.NewEngine()          # Headless mode
+├── webui.NewController()       # UI mode
+├── webui.NewServer()           # UI mode
+└── store.New()                 # Both modes
 
 discord/bot.go
 ├── discord/embeds.go (embed builders)
@@ -308,6 +387,12 @@ mg/client.go
 
 notify/engine.go
 └── store (subscription queries)
+
+webui/server.go
+├── webui/controller.go (bot lifecycle)
+├── webui/loghandler.go (multi-handler)
+├── webui/static/ (go:embed)
+└── store (config operations)
 ```
 
 ## Import Graph
@@ -321,7 +406,8 @@ main
 │   └── github.com/gorilla/websocket
 ├── internal/notify
 ├── internal/store
-│   └── modernc.org/sqlite
+│   └── github.com/mattn/go-sqlite3
+├── internal/webui
 └── golang.org/x/text/cases
 
 internal/discord
@@ -336,15 +422,32 @@ internal/notify
 └── internal/store
 
 internal/store (standalone, no internal deps)
+
+internal/webui
+├── internal/store
+├── internal/discord
+├── internal/mg
+└── internal/notify
 ```
 
 ## Build Output
 
 ```
+# Desktop (macOS/Linux/Windows)
 go build -o magic-guardian ./cmd/magic-guardian/
+
+# Android (arm64, requires NDK)
+CGO_ENABLED=1 GOOS=android GOARCH=arm64 \
+  CC=$NDK/.../aarch64-linux-android26-clang \
+  go build -ldflags="-s -w" -o libguardian.so ./cmd/magic-guardian/
 ```
 
-Produces standalone binary with:
+Desktop binary:
 - No external runtime dependencies
-- SQLite embedded via cgo
-- Static linking for most dependencies
+- SQLite embedded via CGO
+- Web UI assets embedded via `go:embed`
+
+Android binary:
+- PIE executable compiled with `GOOS=android`
+- NDK clang for CGO (sqlite3)
+- Packaged as `libguardian.so` in APK jniLibs

@@ -6,7 +6,7 @@
 
 <br>
 
-A Discord bot that monitors Magic Garden shop inventory and sends "in stock" notifications to subscribed users.
+A Discord bot that monitors Magic Garden shop inventory and sends "in stock" notifications to subscribed users. Runs on Linux, macOS, Windows, and Android.
 
 ## Features
 
@@ -22,6 +22,8 @@ A Discord bot that monitors Magic Garden shop inventory and sends "in stock" not
 - **Batched notifications** — one DM per restock event, not per item
 - **SQLite persistence** — subscriptions survive restarts
 - **Auto-reconnect** — recovers from WebSocket disconnects
+- **Web UI** — browser-based dashboard for configuration and monitoring
+- **Android app** — run the bot from your phone with a native APK
 
 ## Screenshots
 
@@ -101,7 +103,23 @@ echo "DISCORD_APP_ID=your_app_id_here" >> .env
 
 ---
 
-### Option B: Build from Source
+### Option B: Android
+
+1. Download `magic-guardian-android.apk` from the [releases page](https://github.com/kaylincoded/magic-guardian/releases)
+2. On your Android device, enable **Install from unknown sources** in Settings
+3. Open the APK to install
+4. Launch "Magic Guardian" from your app drawer
+5. Enter your Bot Token and Application ID, tap **Save Configuration**
+6. Tap **Start** to launch the bot
+
+The Android app runs the bot as a foreground service with a web-based dashboard. It keeps running in the background and can auto-start on boot.
+
+> [!NOTE]
+> The Android app requires Android 8.0 (API 26) or higher. It runs the same Go engine as the desktop version, with a WebView-based UI at `localhost:8090`.
+
+---
+
+### Option C: Build from Source
 
 ```bash
 # Clone and build
@@ -115,6 +133,20 @@ echo "DISCORD_APP_ID=your_app_id_here" >> .env
 ./magic-guardian
 ```
 
+#### Cross-compile for Android
+
+Requires the [Android NDK](https://developer.android.com/ndk):
+
+```bash
+export NDK=/path/to/android-ndk
+export CC=$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android26-clang
+
+CGO_ENABLED=1 GOOS=android GOARCH=arm64 CC=$CC \
+  go build -ldflags="-s -w" -o libguardian.so ./cmd/magic-guardian/
+```
+
+Then place `libguardian.so` in `android/app/src/main/jniLibs/arm64-v8a/` and build the APK with Gradle.
+
 ---
 
 ### Invite the Bot
@@ -122,10 +154,10 @@ echo "DISCORD_APP_ID=your_app_id_here" >> .env
 Use this URL template (replace `APP_ID`):
 
 ```
-https://discord.com/oauth2/authorize?client_id=APP_ID&scope=bot+applications.commands&permissions=2048
+https://discord.com/oauth2/authorize?client_id=APP_ID&permissions=93200&scope=bot
 ```
 
-Permissions needed: **Manage Channels, Manage Messages, Embed Links, View Channel, Read Message History** (93200)
+Permissions needed: **Manage Channels, Manage Messages, Embed Links, View Channel, Read Message History** (integer `93200`)
 
 ## Policy Compliance
 
@@ -147,15 +179,21 @@ Permissions needed: **Manage Channels, Manage Messages, Embed Links, View Channe
 ## Architecture
 
 ```
-cmd/magic-guardian/main.go     Entry point, wires all components
-internal/mg/client.go          WebSocket client (connect, heartbeat, reconnect)
-internal/mg/messages.go        Protocol types (Welcome, PartialState, Patch)
-internal/mg/shop.go            Shop state management, patch application
-internal/notify/engine.go      Matches stock events to subscriptions
-internal/discord/bot.go        Discord session, slash commands, autocomplete
-internal/discord/embeds.go     Rich embed builders for all responses
-internal/discord/board.go      Live stock board management
-internal/store/sqlite.go       SQLite subscription persistence
+cmd/magic-guardian/main.go       Entry point (headless + web UI modes)
+internal/mg/client.go            WebSocket client (connect, heartbeat, reconnect)
+internal/mg/messages.go          Protocol types (Welcome, PartialState, Patch)
+internal/mg/shop.go              Shop state management, patch application
+internal/mg/discover.go          Auto-discovers game version and room ID
+internal/notify/engine.go        Matches stock events to subscriptions
+internal/discord/bot.go          Discord session, slash commands, autocomplete
+internal/discord/embeds.go       Rich embed builders for all responses
+internal/discord/board.go        Live stock board management
+internal/store/sqlite.go         SQLite subscription + config persistence
+internal/webui/server.go         Embedded HTTP server, REST API, SSE logs
+internal/webui/controller.go     Bot lifecycle management for web UI mode
+internal/webui/loghandler.go     Multi-handler slog (stdout + web buffer)
+internal/webui/static/           Embedded web dashboard (go:embed)
+android/                         Kotlin Android wrapper (WebView + foreground service)
 ```
 
 ## Documentation

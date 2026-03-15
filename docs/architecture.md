@@ -2,7 +2,38 @@
 
 ## Overview
 
-Service-oriented backend with event-driven architecture. The bot maintains a persistent WebSocket connection to Magic Garden, processes inventory changes, and dispatches notifications via Discord.
+Multi-platform application with event-driven architecture. The core is a Go binary that maintains a persistent WebSocket connection to Magic Garden, processes inventory changes, and dispatches notifications via Discord. It supports three deployment modes: headless CLI, web UI, and Android app.
+
+## Deployment Modes
+
+```
+┌─────────────────────────────────────────────┐
+│           Android Shell (Kotlin)             │
+│  MainActivity → WebView → localhost:8090     │
+│  GuardianService → ProcessBuilder → Go binary│
+│  BootReceiver → auto-start on boot           │
+└────────────────────┬────────────────────────┘
+                     │ spawns
+┌────────────────────▼────────────────────────┐
+│            Go Binary (magic-guardian)         │
+│  ┌───────────┐  ┌────────────┐               │
+│  │  Web UI   │  │  Headless  │               │
+│  │  Server   │  │  Mode      │               │
+│  │  :8090    │  │  (.env)    │               │
+│  └─────┬─────┘  └─────┬─────┘               │
+│        └───────┬───────┘                     │
+│          Core Engine                          │
+│  mg/Client ↔ discord/Bot ↔ notify/Engine     │
+│                    ↕                          │
+│               store/SQLite                    │
+└──────────────────────────────────────────────┘
+```
+
+| Mode | Flag | Description |
+|------|------|-------------|
+| Headless | (default) | Reads credentials from `.env`, no UI |
+| Web UI | `-ui` | Embedded HTTP server at `localhost:8090` with REST API and SSE logs |
+| Android | `-ui -auto-start` | Launched by `GuardianService`, UI rendered in WebView |
 
 ## Component Diagram
 
@@ -25,10 +56,13 @@ Service-oriented backend with event-driven architecture. The bot maintains a per
 │  │  • State management │        └─────────────────────────────────────┘ │
 │  └──────────┬──────────┘                                              │
 │             │                                                         │
-│  ┌──────────┴──────────┐                                              │
-│  │   ShopState         │                                              │
-│  │  (RWMutex protected)│                                              │
-│  └──────────┬──────────┘                                              │
+│  ┌──────────┴──────────┐  ┌──────────────────────────────────────┐   │
+│  │   ShopState         │  │   webui/Server (UI mode only)        │   │
+│  │  (RWMutex protected)│  │  • HTTP server :8090                 │   │
+│  └──────────┬──────────┘  │  • REST API                          │   │
+│             │             │  • SSE log streaming                  │   │
+│             │             │  • Embedded static assets (go:embed)  │   │
+│             │             └──────────────────────────────────────────┘ │
 └─────────────┼──────────────────────────────────────────────────────────┘
               │
       ┌───────┼───────┬───────────────┐
@@ -40,7 +74,7 @@ Service-oriented backend with event-driven architecture. The bot maintains a per
 │        │ │        │ │                              │
 │• Match │ │• CMDS  │ │ • subscriptions table       │
 │• Batch │ │• DMs   │ │ • board_messages table      │
-│• Alert │ │• Boards│ │                              │
+│• Alert │ │• Boards│ │ • config table (web UI)     │
 └────────┘ └────┬───┘ └──────────────────────────────┘
                 │
                 ▼
@@ -53,27 +87,75 @@ Service-oriented backend with event-driven architecture. The bot maintains a per
 
 ### Entry Point (`cmd/magic-guardian/main.go`)
 
-Wires all components together:
+Supports two execution paths based on the `-ui` flag:
 
+**Headless mode** (default):
 1. Loads `.env` config
 2. Discovers MG version/room
 3. Initializes SQLite store
-4. Creates MG WebSocket client
-5. Creates Discord bot
-6. Creates notification engine
-7. Wires event callbacks
-8. Starts Discord + WebSocket clients
-9. Waits for SIGINT/SIGTERM
+4. Creates MG WebSocket client, Discord bot, notification engine
+5. Wires event callbacks
+6. Starts Discord + WebSocket clients
+7. Waits for SIGINT/SIGTERM
+
+**Web UI mode** (`-ui`):
+1. Initializes SQLite store
+2. Creates `webui.Controller` and `webui.Server`
+3. Sets up multi-handler logger (stdout + web buffer)
+4. Starts HTTP server on `-listen` address (default `127.0.0.1:8090`)
+5. Optionally auto-starts bot if `-auto-start` flag and saved config exist
+6. Waits for SIGINT/SIGTERM
 
 ```go
+// Headless mode wiring
 mgClient := mg.NewClient(cfg, logger)
 bot, _ := discord.NewBot(token, appID, db, mgClient.State(), logger)
 engine := notify.NewEngine(db, bot, logger)
-
 mgClient.OnRestock(engine.HandleRestocks)
 mgClient.OnStockChange(func(ch) { bot.Board().UpdateAllBoards() })
 mgClient.OnConnect(func() { bot.Board().UpdateAllBoards() })
 ```
+
+### Web UI Layer (`internal/webui/`)
+
+| File | Responsibility |
+|------|----------------|
+| `server.go` | HTTP server, API routes, SSE log streaming, embedded static assets |
+| `controller.go` | Bot lifecycle management (start/stop/status via REST API) |
+| `loghandler.go` | Multi-handler for `slog` (stdout + web log buffer with pub/sub) |
+| `static/index.html` | Single-page dashboard (vanilla HTML/CSS/JS, shadcn-inspired dark theme) |
+
+**API Routes:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Web UI dashboard |
+| GET | `/api/status` | Bot status (running, uptime, room, shops) |
+| GET | `/api/config` | Get saved config (token masked) |
+| POST | `/api/config` | Save Discord credentials |
+| POST | `/api/bot/start` | Start the bot engine |
+| POST | `/api/bot/stop` | Stop the bot engine |
+| POST | `/api/config/boot` | Toggle start-on-boot setting |
+| GET | `/api/guilds` | List connected Discord servers |
+| POST | `/api/guilds/leave` | Leave a Discord server |
+| GET | `/api/logs` | SSE stream of log lines |
+
+### Android Layer (`android/`)
+
+The Android app is a thin Kotlin wrapper that runs the Go binary as a foreground service:
+
+| File | Responsibility |
+|------|----------------|
+| `MainActivity.kt` | Full-screen WebView pointing at `http://127.0.0.1:8090` |
+| `GuardianService.kt` | Foreground service; launches Go binary via `ProcessBuilder` with `-ui -listen 127.0.0.1:8090 -auto-start`; acquires `PARTIAL_WAKE_LOCK` |
+| `BootReceiver.kt` | `BOOT_COMPLETED` receiver; auto-starts `GuardianService` on device boot |
+
+**Android build details:**
+- Package: `gg.magicguardian`
+- minSdk: 26, targetSdk: 35, compileSdk: 35
+- AGP 8.7.3, Kotlin 2.1.0, Gradle 8.11.1
+- Go binary cross-compiled with `GOOS=android GOARCH=arm64` using NDK clang
+- Binary packaged as `libguardian.so` in `jniLibs/` (PIE executable, not a shared library)
 
 ### WebSocket Layer (`internal/mg/`)
 

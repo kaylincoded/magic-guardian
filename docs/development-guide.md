@@ -8,10 +8,18 @@
 - **Git** - Version control
 - **Discord Developer Account** - For bot credentials
 
+### For Android Development
+
+- **Android NDK r27+** - Cross-compilation toolchain for CGO
+- **Android SDK** (platform-tools, build-tools, platform 35)
+- **JDK 21** - Required by Android Gradle Plugin 8.7.3
+- **Gradle 8.11+** - Build system (wrapper included in `android/`)
+
 ### Recommended Tools
 
 - **GoLand** or **VS Code** - IDE with Go support
 - **TablePlus** or **DB Browser for SQLite** - Database inspection
+- **Android Studio** or **Android Emulator** - For Android testing
 
 ---
 
@@ -89,7 +97,7 @@ DISCORD_TOKEN=xxx ./magic-guardian
 magic-guardian/
 ├── cmd/
 │   └── magic-guardian/
-│       └── main.go              # Entry point
+│       └── main.go              # Entry point (headless + web UI modes)
 ├── internal/
 │   ├── discord/                 # Discord interface
 │   │   ├── bot.go
@@ -102,8 +110,14 @@ magic-guardian/
 │   │   └── discover.go
 │   ├── notify/                  # Notification engine
 │   │   └── engine.go
-│   └── store/                   # Persistence
-│       └── sqlite.go
+│   ├── store/                   # Persistence
+│   │   └── sqlite.go
+│   └── webui/                   # Web UI server
+│       ├── server.go
+│       ├── controller.go
+│       ├── loghandler.go
+│       └── static/index.html
+├── android/                     # Android wrapper (Kotlin)
 ├── docs/                        # Documentation
 ├── go.mod / go.sum
 ├── .env.example
@@ -452,11 +466,45 @@ func (e *Engine) HandleRestocks(changes []mg.StockChange) {
 # Linux amd64
 GOOS=linux GOARCH=amd64 go build -o magic-guardian-linux ./cmd/magic-guardian/
 
-# Cross-platform builds
-GOOS=darwin GOARCH=amd64 go build -o magic-guardian-macos ./cmd/magic-guardian/
+# macOS (Apple Silicon)
+GOOS=darwin GOARCH=arm64 go build -o magic-guardian-darwin-arm64 ./cmd/magic-guardian/
+
+# macOS (Intel)
+GOOS=darwin GOARCH=amd64 go build -o magic-guardian-darwin-amd64 ./cmd/magic-guardian/
+
+# Windows
+GOOS=windows GOARCH=amd64 go build -o magic-guardian-windows-amd64.exe ./cmd/magic-guardian/
 ```
 
-### Running as Service
+### Build for Android
+
+Requires the Android NDK:
+
+```bash
+export ANDROID_HOME=/path/to/android-sdk
+export NDK=$ANDROID_HOME/ndk/27.2.12479018
+export CC=$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android26-clang
+export CXX=$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android26-clang++
+
+# Cross-compile Go binary for Android arm64
+CGO_ENABLED=1 GOOS=android GOARCH=arm64 CC=$CC CXX=$CXX \
+  go build -ldflags="-s -w" \
+  -o android/app/src/main/jniLibs/arm64-v8a/libguardian.so \
+  ./cmd/magic-guardian/
+
+# Build the APK (requires JDK 21)
+export JAVA_HOME=/path/to/jdk-21
+cd android && ./gradlew assembleDebug
+# Output: android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+**Important notes:**
+- Use `GOOS=android` (not `linux`) to avoid `-lpthread` linker errors
+- Do **not** use `-tags "netgo"` -- it breaks DNS resolution on Android (no `/etc/resolv.conf`)
+- The binary must be a PIE executable (default), **not** `-buildmode=c-shared`
+- The binary is named `libguardian.so` for Android packaging but is a standalone executable
+
+### Running as Service (Linux)
 
 Create systemd service at `/etc/systemd/system/magic-guardian.service`:
 
@@ -484,6 +532,22 @@ Enable and start:
 sudo systemctl daemon-reload
 sudo systemctl enable magic-guardian
 sudo systemctl start magic-guardian
+```
+
+### Running with Web UI
+
+```bash
+# Start with web UI on default port (127.0.0.1:8090)
+./magic-guardian -ui
+
+# Custom listen address
+./magic-guardian -ui -listen "0.0.0.0:8080"
+
+# Auto-start bot if saved credentials exist
+./magic-guardian -ui -auto-start
+
+# Custom database path
+./magic-guardian -ui -db /data/magic-guardian.db
 ```
 
 ---
