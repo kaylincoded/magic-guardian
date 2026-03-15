@@ -29,6 +29,38 @@ A Discord bot that monitors Magic Garden shop inventory and sends "in stock" not
 |-----------|-------------|
 | ![Watchlist](./watchlist.png) | ![Stock Alert](./stockalert.png) |
 
+## Running the Bot
+
+The bot can run in two modes:
+
+- **Headless mode** (default) — CLI-based, reads from `.env` file
+- **Web UI mode** — Starts an embedded web server for browser-based setup and control
+
+### Headless Mode (CLI)
+
+```bash
+# Configure credentials
+echo "DISCORD_TOKEN=your_bot_token_here" > .env
+echo "DISCORD_APP_ID=your_app_id_here" >> .env
+
+# Run
+./magic-guardian
+```
+
+### Web UI Mode
+
+```bash
+# Start with the -ui flag (listens on localhost:8090 by default)
+./magic-guardian -ui
+
+# Or with custom options
+./magic-guardian -ui -listen "0.0.0.0:8080" -db "mydata.db" -auto-start
+```
+
+The web UI lets you configure the bot through your browser without needing a `.env` file. Access it at `http://localhost:8090` after starting.
+
+---
+
 ## Getting Started
 
 > [!IMPORTANT]

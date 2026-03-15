@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Magic Guardian</title>
+<style>
+  :root {
+    --bg: #0f1923;
+    --card: #172230;
+    --card-elevated: #1c2b3a;
+    --border: #253545;
+    --text: #e4ecf4;
+    --text-secondary: #a0b0c0;
+    --muted: #607080;
+    --accent: #4a9eff;
+    --green: #34d399;
+    --red: #f87171;
+    --orange: #fbbf24;
+    --discord: #5865F2;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Header */
+  .header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .header-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+  .header-title {
+    font-size: 17px;
+    font-weight: 600;
+    flex: 1;
+  }
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+  .status-dot.running { background: var(--green); }
+  .status-dot.starting { background: var(--orange); animation: pulse 1.2s ease-in-out infinite; }
+  .status-dot.error { background: var(--red); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* Layout */
+  .container { padding: 16px; max-width: 600px; margin: 0 auto; }
+
+  /* Cards */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 12px;
+  }
+  .card-header {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  /* Form fields */
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 11px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .field input::placeholder { color: var(--muted); }
+
+  /* Buttons */
+  .btn-row { display: flex; gap: 10px; margin-top: 14px; }
+  .btn {
+    flex: 1;
+    padding: 11px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    -webkit-appearance: none;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.4; pointer-events: none; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-start { background: var(--green); color: #0f1923; }
+  .btn-stop { background: rgba(248,113,113,0.15); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+  .btn-stop:active { background: rgba(248,113,113,0.25); }
+
+  /* Status grid */
+  .status-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stat {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .stat-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .stat-value {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  /* Discord servers */
+  .discord-card { display: none; }
+  .discord-card.visible { display: block; }
+  .guild-list { margin-bottom: 12px; }
+  .guild-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border-radius: 8px;
+    margin-bottom: 6px;
+  }
+  .guild-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--border);
+    flex-shrink: 0;
+    object-fit: cover;
+  }
+  .guild-icon-placeholder {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--discord);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .guild-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .btn-remove {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    flex-shrink: 0;
+    -webkit-appearance: none;
+  }
+  .btn-remove:active { color: var(--red); border-color: var(--red); }
+  .btn-discord {
+    width: 100%;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--discord);
+    color: #fff;
+    -webkit-appearance: none;
+  }
+  .btn-discord:active { opacity: 0.85; }
+
+  /* Logs */
+  .log-container {
+    background: #0a1018;
+    border-radius: 8px;
+    padding: 10px 12px;
+    height: 220px;
+    overflow-y: auto;
+    font-family: "SF Mono", "Menlo", "Cascadia Code", monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: #607888;
+    scroll-behavior: smooth;
+  }
+  .log-line { white-space: pre-wrap; word-break: break-all; }
+  .log-line.error { color: var(--red); }
+  .log-line.warn { color: var(--orange); }
+  .log-line.info { color: #5b9bd5; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--card-elevated);
+    border: 1px solid var(--border);
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: transform 0.25s ease;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.error { border-color: rgba(248,113,113,0.4); color: var(--red); }
+  .toast.success { border-color: rgba(52,211,153,0.4); color: var(--green); }
+
+  /* Toggle switch */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+  }
+  .toggle-label {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .toggle-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+  .toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .toggle-track {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--border);
+    border-radius: 12px;
+    transition: background 0.2s;
+    cursor: pointer;
+  }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    left: 3px;
+    top: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .toggle input:checked + .toggle-track {
+    background: var(--green);
+  }
+  .toggle input:checked + .toggle-track::after {
+    transform: translateX(20px);
+  }
+
+  /* Helper text */
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+  .hint a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <img class="header-logo" src="/static/logo.png" alt="">
+  <span class="header-title">Magic Guardian</span>
+  <div class="header-status">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="headerStatusLabel">Offline</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Setup -->
+  <div class="card">
+    <div class="card-header">Setup</div>
+    <div class="field">
+      <label for="token">Bot Token</label>
+      <input type="password" id="token" placeholder="Paste your Discord bot token" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="appId">Application ID</label>
+      <input type="text" id="appId" placeholder="e.g. 1234567890" inputmode="numeric" autocomplete="off">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="saveBtn" onclick="saveConfig()">Save Configuration</button>
+    </div>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Start on boot</div>
+        <div class="toggle-sub">Automatically start when device powers on</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="startOnBoot" onchange="toggleStartOnBoot()">
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+    <div class="hint">
+      Get these from <a href="https://discord.com/developers/applications" target="_blank">discord.com/developers/applications</a>.
+    </div>
+  </div>
+
+  <!-- Status & Controls -->
+  <div class="card">
+    <div class="card-header">Bot Status</div>
+    <div class="status-grid">
+      <div class="stat">
+        <div class="stat-label">State</div>
+        <div class="stat-value" id="statusText">Stopped</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Uptime</div>
+        <div class="stat-value" id="uptimeText">--</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Room</div>
+        <div class="stat-value" id="roomText">--</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Shops</div>
+        <div class="stat-value" id="shopText">--</div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-start" id="startBtn" onclick="startBot()">Start</button>
+      <button class="btn btn-stop" id="stopBtn" onclick="stopBot()" disabled>Stop</button>
+    </div>
+  </div>
+
+  <!-- Discord Servers -->
+  <div class="card discord-card" id="discordInvite">
+    <div class="card-header">Discord Servers</div>
+    <div class="guild-list" id="guildList"></div>
+    <button class="btn-discord" onclick="openInvite()">Add to a Server</button>
+  </div>
+
+  <!-- Logs -->
+  <div class="card">
+    <div class="card-header">Logs</div>
+    <div class="log-container" id="logContainer"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var statusInterval, logSource;
+
+function api(method, path, body) {
+  var opts = { method: method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  return fetch(path, opts).then(function(res) {
+    return res.json().then(function(data) {
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    });
+  });
+}
+
+function toast(msg, type) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + (type || '');
+  setTimeout(function() { el.className = 'toast'; }, 3000);
+}
+
+function escapeHtml(str) {
+  var d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function loadConfig() {
+  api('GET', '/api/config').then(function(cfg) {
+    if (cfg.discord_token) document.getElementById('token').value = cfg.discord_token;
+    if (cfg.app_id) document.getElementById('appId').value = cfg.app_id;
+    document.getElementById('startOnBoot').checked = cfg.start_on_boot === 'true';
+  }).catch(function() {});
+}
+
+function toggleStartOnBoot() {
+  var enabled = document.getElementById('startOnBoot').checked;
+  api('POST', '/api/config/boot', { enabled: enabled }).then(function() {
+    toast(enabled ? 'Will start on boot' : 'Will not start on boot', 'success');
+  }).catch(function(e) { toast(e.message, 'error'); });
+}
+
+function saveConfig() {
+  var token = document.getElementById('token').value.trim();
+  var appId = document.getElementById('appId').value.trim();
+  if (!token || !appId) { toast('Both fields are required', 'error'); return; }
+  document.getElementById('saveBtn').disabled = true;
+  api('POST', '/api/config', { discord_token: token, app_id: appId }).then(function() {
+    toast('Configuration saved', 'success');
+  }).catch(function(e) {
+    toast(e.message, 'error');
+  }).finally(function() {
+    document.getElementById('saveBtn').disabled = false;
+  });
+}
+
+function startBot() {
+  document.getElementById('startBtn').disabled = true;
+  api('POST', '/api/bot/start').then(function() {
+    toast('Starting bot...', 'success');
+    updateStatus();
+  }).catch(function(e) {
+    toast(e.message, 'error');
+    document.getElementById('startBtn').disabled = false;
+  });
+}
+
+function stopBot() {
+  document.getElementById('stopBtn').disabled = true;
+  api('POST', '/api/bot/stop').then(function() {
+    toast('Bot stopped', 'success');
+    updateStatus();
+  }).catch(function(e) { toast(e.message, 'error'); });
+}
+
+function openInvite() {
+  var appId = document.getElementById('appId').value.trim();
+  if (!appId) { toast('Save your App ID first', 'error'); return; }
+  window.open('https://discord.com/oauth2/authorize?client_id=' + appId + '&permissions=93200&scope=bot', '_blank');
+}
+
+function loadGuilds() {
+  var container = document.getElementById('guildList');
+  api('GET', '/api/guilds').then(function(guilds) {
+    container.innerHTML = '';
+    if (!guilds || !guilds.length) return;
+    guilds.forEach(function(g) {
+      var el = document.createElement('div');
+      el.className = 'guild-item';
+      var icon = g.icon
+        ? '<img class="guild-icon" src="' + g.icon + '" alt="">'
+        : '<div class="guild-icon-placeholder">' + (g.name ? g.name.charAt(0).toUpperCase() : '?') + '</div>';
+      el.innerHTML = icon
+        + '<span class="guild-name">' + escapeHtml(g.name) + '</span>'
+        + '<button class="btn-remove" onclick="leaveGuild(\'' + g.id + '\',\'' + escapeHtml(g.name).replace(/'/g, "\\'") + '\')">Remove</button>';
+      container.appendChild(el);
+    });
+  }).catch(function() {});
+}
+
+function leaveGuild(id, name) {
+  if (!confirm('Remove bot from ' + name + '?')) return;
+  api('POST', '/api/guilds/leave', { guild_id: id }).then(function() {
+    toast('Left ' + name, 'success');
+    loadGuilds();
+  }).catch(function(e) { toast(e.message, 'error'); });
+}
+
+function updateStatus() {
+  api('GET', '/api/status').then(function(s) {
+    var dot = document.getElementById('statusDot');
+    var label = document.getElementById('headerStatusLabel');
+    var text = document.getElementById('statusText');
+    var startBtn = document.getElementById('startBtn');
+    var stopBtn = document.getElementById('stopBtn');
+    var invite = document.getElementById('discordInvite');
+
+    if (s.running) {
+      dot.className = 'status-dot running';
+      label.textContent = 'Running';
+      label.style.color = 'var(--green)';
+      text.textContent = 'Running';
+      text.style.color = 'var(--green)';
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      invite.classList.add('visible');
+      loadGuilds();
+    } else if (s.status === 'starting') {
+      dot.className = 'status-dot starting';
+      label.textContent = 'Starting';
+      label.style.color = 'var(--orange)';
+      text.textContent = 'Starting...';
+      text.style.color = 'var(--orange)';
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      invite.classList.remove('visible');
+    } else {
+      dot.className = s.error ? 'status-dot error' : 'status-dot';
+      label.textContent = s.error ? 'Error' : 'Offline';
+      label.style.color = s.error ? 'var(--red)' : 'var(--muted)';
+      text.textContent = s.error ? 'Error' : 'Stopped';
+      text.style.color = s.error ? 'var(--red)' : 'var(--muted)';
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      invite.classList.remove('visible');
+    }
+
+    document.getElementById('uptimeText').textContent = s.uptime || '--';
+    document.getElementById('roomText').textContent = s.room || '--';
+    document.getElementById('shopText').textContent = s.shopCount > 0 ? s.shopCount + ' loaded' : '--';
+  }).catch(function() {});
+}
+
+function connectLogStream() {
+  if (logSource) logSource.close();
+  logSource = new EventSource('/api/logs');
+  var container = document.getElementById('logContainer');
+  logSource.onmessage = function(e) {
+    var el = document.createElement('div');
+    el.className = 'log-line';
+    if (e.data.indexOf('level=ERROR') !== -1) el.classList.add('error');
+    else if (e.data.indexOf('level=WARN') !== -1) el.classList.add('warn');
+    else if (e.data.indexOf('level=INFO') !== -1) el.classList.add('info');
+    el.textContent = e.data;
+    container.appendChild(el);
+    while (container.children.length > 500) container.removeChild(container.firstChild);
+    container.scrollTop = container.scrollHeight;
+  };
+  logSource.onerror = function() { setTimeout(connectLogStream, 3000); };
+}
+
+loadConfig();
+updateStatus();
+connectLogStream();
+statusInterval = setInterval(updateStatus, 3000);
+</script>
+</body>
+</html>

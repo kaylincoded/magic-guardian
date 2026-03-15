@@ -3,16 +3,12 @@
 /magic-guardian
 /dist/
 
-# AI/IDE configs
-.claude/
-.opencode/
-.windsurf/
+# Android build
+android/.gradle/
+android/app/build/
 
-# BMAD workflow system
-_bmad/
-_bmad-output/
-
-# Debug builds
-*-debug
-magic-guardian-linux
-magic-guardian
+# Go build outputs
+/releases/magic-guardian-*
+*.exe
+*.so
+*.dylib

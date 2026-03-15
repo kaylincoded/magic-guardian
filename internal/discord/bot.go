@@ -137,6 +137,31 @@ func (b *Bot) Session() *discordgo.Session {
 	return b.session
 }
 
+// GuildInfo holds basic information about a Discord guild the bot is in.
+type GuildInfo struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Icon string `json:"icon"`
+}
+
+// Guilds returns a list of guilds the bot is currently in.
+func (b *Bot) Guilds() []GuildInfo {
+	var guilds []GuildInfo
+	for _, g := range b.session.State.Guilds {
+		guilds = append(guilds, GuildInfo{
+			ID:   g.ID,
+			Name: g.Name,
+			Icon: g.IconURL("64"),
+		})
+	}
+	return guilds
+}
+
+// LeaveGuild removes the bot from the specified guild.
+func (b *Bot) LeaveGuild(guildID string) error {
+	return b.session.GuildLeave(guildID)
+}
+
 // SendStockAlert sends a DM to a user with stock alert information
 // and per-item unsubscribe buttons + a "stop all" button.
 func (b *Bot) SendStockAlert(userID string, changes []mg.StockChange) error {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // Store manages subscription persistence.
@@ -24,7 +24,7 @@ type Subscription struct {
 
 // New opens or creates a SQLite database at the given path.
 func New(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
@@ -61,6 +61,10 @@ func migrate(db *sql.DB) error {
 			shop_type  TEXT NOT NULL,
 			message_id TEXT NOT NULL,
 			PRIMARY KEY(guild_id, shop_type)
+		);
+		CREATE TABLE IF NOT EXISTS config (
+			key   TEXT PRIMARY KEY,
+			value TEXT NOT NULL
 		);
 	`)
 	return err
@@ -200,6 +204,41 @@ func (s *Store) GetAllBoardConfigs() ([]BoardConfig, error) {
 func (s *Store) DeleteBoardConfig(guildID string) error {
 	_, err := s.db.Exec(`DELETE FROM board_messages WHERE guild_id = ?`, guildID)
 	return err
+}
+
+// GetConfig returns a config value by key, or empty string if not found.
+func (s *Store) GetConfig(key string) (string, error) {
+	var value string
+	err := s.db.QueryRow(`SELECT value FROM config WHERE key = ?`, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return value, err
+}
+
+// SetConfig stores a config key-value pair (upsert).
+func (s *Store) SetConfig(key, value string) error {
+	_, err := s.db.Exec(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`, key, value)
+	return err
+}
+
+// GetAllConfig returns all config key-value pairs.
+func (s *Store) GetAllConfig() (map[string]string, error) {
+	rows, err := s.db.Query(`SELECT key, value FROM config`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cfg := make(map[string]string)
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		cfg[k] = v
+	}
+	return cfg, rows.Err()
 }
 
 // Close closes the database.
