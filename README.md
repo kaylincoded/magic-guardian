@@ -87,7 +87,7 @@ Pre-built binaries are available on the [releases page](https://github.com/kayli
 | Windows | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.0/magic-guardian-windows-amd64.exe` |
 | Android (APK) | [Download from releases page](https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.0/magic-guardian-android.apk) |
 
-Then configure and run:
+**Desktop (Linux/macOS/Windows):** configure and run:
 
 ```bash
 # Make executable (Linux/macOS)
@@ -101,31 +101,17 @@ echo "DISCORD_APP_ID=your_app_id_here" >> .env
 ./magic-guardian-linux-amd64
 ```
 
----
-
-### Option B: Android
+**Android:** install the APK on your device, open the app, enter your credentials, and tap Start.
 
 <div align="center">
   <img src="android-mg-demo.png" alt="Magic Guardian Android App" width="300">
 </div>
 
-<br>
-
-1. Download `magic-guardian-android.apk` from the [releases page](https://github.com/kaylincoded/magic-guardian/releases)
-2. On your Android device, enable **Install from unknown sources** in Settings
-3. Open the APK to install
-4. Launch "Magic Guardian" from your app drawer
-5. Enter your Bot Token and Application ID, tap **Save Configuration**
-6. Tap **Start** to launch the bot
-
-The Android app runs the bot as a foreground service with a web-based dashboard. It keeps running in the background and can auto-start on boot.
-
-> [!NOTE]
-> The Android app requires Android 8.0 (API 26) or higher. It runs the same Go engine as the desktop version, with a WebView-based UI at `localhost:8090`.
+The Android app runs the bot as a foreground service with a web-based dashboard. It keeps running in the background and can auto-start on boot. Requires Android 8.0+ (API 26).
 
 ---
 
-### Option C: Build from Source
+### Option B: Build from Source
 
 ```bash
 # Clone and build
