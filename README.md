@@ -109,6 +109,19 @@ echo "DISCORD_APP_ID=your_app_id_here" >> .env
 
 The Android app runs the bot as a foreground service with a web-based dashboard. It keeps running in the background and can auto-start on boot. Requires Android 8.0+ (API 26).
 
+> [!TIP]
+> The web UI is available on **all platforms** (Linux, macOS, Windows). Use the `-ui` flag to start it:
+>
+> ```bash
+> # Start with web UI (localhost:8090)
+> ./magic-guardian -ui
+>
+> # With custom address, database path, and auto-start
+> ./magic-guardian -ui -listen "0.0.0.0:8080" -db "mydata.db" -auto-start
+> ```
+>
+> Without `-ui`, the bot runs in headless mode and reads credentials from a `.env` file or environment variables.
+
 ---
 
 ### Option B: Build from Source
