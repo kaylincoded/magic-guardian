@@ -14,9 +14,11 @@
 | **Entry Point** | `cmd/magic-guardian/main.go` |
 | **Tech Stack** | Go 1.25, discordgo, gorilla/websocket, SQLite, Kotlin (Android) |
 | **Architecture** | Multi-platform app: headless CLI, web UI, Android |
-| **Build Command** | `go build -o magic-guardian ./cmd/magic-guardian/` |
+| **Build** | `make build` or `go build -o magic-guardian ./cmd/magic-guardian/` |
+| **Test** | `make test-race` (112 tests with race detector) |
+| **CI** | GitHub Actions: test + build on push/PR, release on tag |
 | **Web UI** | `./magic-guardian -ui` (serves at `localhost:8090`) |
-| **Android** | Kotlin wrapper + cross-compiled Go binary via NDK |
+| **Android** | `make android-apk` (Kotlin wrapper + NDK cross-compiled Go binary) |
 
 ## Documentation
 
@@ -86,9 +88,10 @@
 ### For Developers
 
 1. Follow [Development Guide](./development-guide.md)
-2. Build: `go build ./cmd/magic-guardian/`
-3. Run headless: `./magic-guardian`
-4. Run web UI: `./magic-guardian -ui`
+2. `make test-race` -- run 112 tests with race detector
+3. `make build` -- build the binary
+4. `make android-apk` -- build the Android APK
+5. Push to `main` or open a PR -- CI runs automatically
 
 ---
 

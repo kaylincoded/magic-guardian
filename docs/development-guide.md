@@ -128,32 +128,70 @@ magic-guardian/
 
 ## Development Workflow
 
+### Using the Makefile
+
+The project includes a Makefile for common tasks:
+
+```bash
+make              # Run tests + build
+make test         # Run all tests
+make test-race    # Run tests with race detector
+make test-cover   # Run tests with coverage report
+make test-verbose # Run tests with verbose output + race detector
+make build        # Build the binary
+make vet          # Run go vet
+make lint         # Run golangci-lint (requires: brew install golangci-lint)
+make android-build # Cross-compile Go binary for Android arm64
+make android-apk   # Build the Android APK (requires NDK + JDK 21)
+make release-binaries # Build macOS binaries
+make clean        # Remove build artifacts
+```
+
 ### Running Tests
+
+The project has 112 tests across 5 packages covering the core engine, notification dispatch, SQLite persistence, and web UI HTTP handlers.
 
 ```bash
 # Run all tests
-go test ./...
+make test
+
+# Run with race detector (recommended)
+make test-race
 
 # Run with coverage
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
+make test-cover
+# Then open: go tool cover -html=coverage.out
+
+# Run specific package
+go test ./internal/mg/... -v
+
+# Run specific test
+go test ./internal/mg/... -run TestHandleWelcome -v
 ```
 
-### Running with Hot Reload
+**Test coverage by package:**
 
-Use `fresh` for auto-rebuilding:
+| Package | Coverage | Tests | What's covered |
+|---------|----------|-------|----------------|
+| `internal/mg` | 51% | 55 | Restock detection, reconnect diff, message routing, state management, concurrency |
+| `internal/notify` | 86% | 8 | Subscription matching, batching, error isolation, case-insensitivity |
+| `internal/store` | 85% | 21 | CRUD operations, unique constraints, case handling, config upsert |
+| `internal/webui` | 47% | 29 | All HTTP handlers, token masking, port conflict, SSE streaming, LogBuffer |
+| `internal/discord` | 0% | 0 | Requires Discord API (integration test territory) |
 
-```bash
-go install github.com/pilu/fresh@latest
-fresh
-```
+### CI Pipeline
 
-Or use `air`:
+Every push to `main` and every PR triggers the CI pipeline (`.github/workflows/ci.yml`):
 
-```bash
-go install github.com/cosmtrek/air@latest
-air
-```
+1. `go vet` -- static analysis
+2. `go test -race` -- full test suite with race detector
+3. Coverage report uploaded as artifact
+4. Cross-compilation build matrix (5 platforms)
+
+Releases are automated via `.github/workflows/release.yml`:
+- Triggered by pushing a version tag (`git tag v0.3.0 && git push --tags`)
+- Builds all desktop binaries + Android APK
+- Creates GitHub Release with all artifacts attached
 
 ### Debug Mode
 
@@ -291,47 +329,55 @@ go build ./cmd/magic-guardian/
 
 ---
 
-## Testing New Features
+## Testing
 
-### Manual Testing
+### Test Architecture
 
-1. Invite bot to test server
-2. Use the new command
-3. Check logs for errors
-4. Verify expected behavior
+Tests live alongside their source files (`*_test.go`). The project uses Go's built-in testing framework with no external test libraries.
 
-### Adding Unit Tests
+**Test files:**
 
-Create test file alongside implementation:
+| File | Tests | What it covers |
+|------|-------|----------------|
+| `internal/mg/client_test.go` | 29 | `diffShopState`, `handleWelcome`, `handlePartialState`, `handleMessage` routing, concurrent access |
+| `internal/mg/shop_test.go` | 18 | `ApplyPatches`, timer handling, `FormatItemName`, `FormatStock`, `ShopItem.ItemID` |
+| `internal/mg/messages_test.go` | 5 | JSON unmarshaling of protocol types |
+| `internal/mg/discover_test.go` | 2 | Room ID and version regex extraction |
+| `internal/notify/engine_test.go` | 8 | Subscription matching, batching (call count verification), error isolation |
+| `internal/store/sqlite_test.go` | 21 | All CRUD operations, unique constraints, re-subscribe, board config, key-value config |
+| `internal/webui/server_test.go` | 29 | All HTTP endpoints, token masking, port conflict, SSE streaming, LogBuffer |
+
+### Testing Conventions
+
+**Verify outcomes, not just counts.** Every assertion checks actual field values:
 
 ```go
-// internal/mg/shop_test.go
-package mg
+// Good: verifies the full payload
+if ch.ShopType != "seed" || ch.OldStock != 0 || ch.NewStock != 5 {
+    t.Errorf("got shop=%q %d→%d, want seed 0→5", ch.ShopType, ch.OldStock, ch.NewStock)
+}
 
-import "testing"
-
-func TestFormatItemName(t *testing.T) {
-    tests := []struct {
-        input    string
-        expected string
-    }{
-        {"Bamboo", "Bamboo Seed"},
-        {"MythicalEgg", "Mythical Egg"},
-    }
-    
-    for _, tt := range tests {
-        result := FormatItemName(tt.input)
-        if result != tt.expected {
-            t.Errorf("FormatItemName(%q) = %q, want %q", tt.input, result, tt.expected)
-        }
-    }
+// Bad: only checks count
+if len(changes) != 1 {
+    t.Error("wrong count")
 }
 ```
 
-Run tests:
+**Test production code paths, not reimplementations.** Integration tests call `handleWelcome()`, `handlePartialState()`, and `handleMessage()` directly rather than reimplementing their logic.
+
+**Use mock interfaces for external dependencies.** The `webui` tests use a `mockController` implementing `BotController`. The `notify` tests use a `mockSender` implementing `AlertSender` that tracks per-call payloads for batch verification.
+
+### Adding New Tests
 
 ```bash
-go test ./internal/mg/...
+# Create test file alongside implementation
+# internal/mypackage/mycode_test.go
+
+# Run it
+go test ./internal/mypackage/... -v -run TestMyNewFunction
+
+# Run with race detector
+go test ./internal/mypackage/... -race
 ```
 
 ---

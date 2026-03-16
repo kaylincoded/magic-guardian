@@ -14,15 +14,22 @@ magic-guardian/                          # Module: github.com/kaylincoded/magic-
 │   │   └── board.go                     # → Stock board management
 │   ├── mg/                              # Magic Garden protocol
 │   │   ├── client.go                    # → WebSocket client
+│   │   ├── client_test.go              # → 29 tests: diffShopState, handleWelcome, handleMessage
 │   │   ├── messages.go                  # → Protocol types
+│   │   ├── messages_test.go            # → 5 tests: JSON unmarshaling
 │   │   ├── shop.go                      # → State management
-│   │   └── discover.go                  # → Version discovery
+│   │   ├── shop_test.go                # → 18 tests: ApplyPatches, timers, format
+│   │   ├── discover.go                  # → Version discovery
+│   │   └── discover_test.go            # → 2 tests: regex extraction
 │   ├── notify/                          # Notification matching
-│   │   └── engine.go                    # → Subscription matching
+│   │   ├── engine.go                    # → Subscription matching
+│   │   └── engine_test.go              # → 8 tests: batching, errors, case handling
 │   ├── store/                           # Persistence
-│   │   └── sqlite.go                    # → SQLite store (subs, board, config)
+│   │   ├── sqlite.go                    # → SQLite store (subs, board, config)
+│   │   └── sqlite_test.go              # → 21 tests: CRUD, constraints, upsert
 │   └── webui/                           # Web UI (ui mode only)
 │       ├── server.go                    # → HTTP server, API routes, SSE logs
+│       ├── server_test.go              # → 29 tests: all endpoints, token masking, SSE
 │       ├── controller.go                # → Bot lifecycle management
 │       ├── loghandler.go                # → Multi-handler slog
 │       └── static/
@@ -41,8 +48,12 @@ magic-guardian/                          # Module: github.com/kaylincoded/magic-
 │           │   └── BootReceiver.kt      # → Auto-start on boot
 │           ├── jniLibs/arm64-v8a/       # Cross-compiled Go binary
 │           └── res/                     # Icons, strings, themes
+├── .github/workflows/                   # CI/CD
+│   ├── ci.yml                           # → Test + build on push/PR
+│   └── release.yml                      # → Build all platforms + release on tag
 ├── releases/                            # Pre-built binaries + APK
 ├── docs/                                # Documentation
+├── Makefile                             # Build, test, lint, android targets
 ├── go.mod                               # Module: go 1.25
 ├── go.sum
 ├── .env.example                         # Environment template

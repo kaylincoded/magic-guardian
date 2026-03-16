@@ -29,6 +29,8 @@ Magic Guardian is a Discord bot that monitors Magic Garden game shop inventory a
 | Android | Kotlin 2.1.0, AGP 8.7.3, Gradle 8.11.1 | - |
 | Android SDK | compileSdk 35, minSdk 26, targetSdk 35 | - |
 | Build/Release | GoReleaser | - |
+| CI/CD | GitHub Actions | - |
+| Testing | go test, race detector | 112 tests |
 
 ## Architecture Type
 
@@ -75,8 +77,12 @@ magic-guardian/
 │   │   ├── java/gg/magicguardian/  # MainActivity, GuardianService, BootReceiver
 │   │   └── jniLibs/                # Cross-compiled Go binaries
 │   └── build.gradle.kts
+├── .github/workflows/        # CI/CD pipelines
+│   ├── ci.yml                # Test + build on push/PR
+│   └── release.yml           # Build + publish on version tag
 ├── releases/                 # Pre-built binaries and APK
 ├── docs/                     # This documentation
+├── Makefile                  # Build, test, lint, android targets
 ├── go.mod / go.sum           # Go modules
 └── magic-guardian.db         # SQLite database (runtime)
 ```

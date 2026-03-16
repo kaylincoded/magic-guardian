@@ -130,7 +130,10 @@ The Android app runs the bot as a foreground service with a web-based dashboard.
 # Clone and build
 git clone https://github.com/kaylincoded/magic-guardian.git
 cd magic-guardian
-go build -o magic-guardian ./cmd/magic-guardian/
+make build
+
+# Run tests
+make test-race
 
 # Configure and run
 echo "DISCORD_TOKEN=your_bot_token_here" > .env
@@ -138,19 +141,16 @@ echo "DISCORD_APP_ID=your_app_id_here" >> .env
 ./magic-guardian
 ```
 
-#### Cross-compile for Android
+#### Build the Android APK
 
-Requires the [Android NDK](https://developer.android.com/ndk):
+Requires the [Android NDK](https://developer.android.com/ndk) and JDK 21:
 
 ```bash
-export NDK=/path/to/android-ndk
-export CC=$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android26-clang
-
-CGO_ENABLED=1 GOOS=android GOARCH=arm64 CC=$CC \
-  go build -ldflags="-s -w" -o libguardian.so ./cmd/magic-guardian/
+make android-apk
+# Output: android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Then place `libguardian.so` in `android/app/src/main/jniLibs/arm64-v8a/` and build the APK with Gradle.
+See the [Development Guide](./docs/development-guide.md) for detailed setup and all Makefile targets.
 
 ---
 
@@ -185,20 +185,14 @@ Permissions needed: **Manage Channels, Manage Messages, Embed Links, View Channe
 
 ```
 cmd/magic-guardian/main.go       Entry point (headless + web UI modes)
-internal/mg/client.go            WebSocket client (connect, heartbeat, reconnect)
-internal/mg/messages.go          Protocol types (Welcome, PartialState, Patch)
-internal/mg/shop.go              Shop state management, patch application
-internal/mg/discover.go          Auto-discovers game version and room ID
-internal/notify/engine.go        Matches stock events to subscriptions
-internal/discord/bot.go          Discord session, slash commands, autocomplete
-internal/discord/embeds.go       Rich embed builders for all responses
-internal/discord/board.go        Live stock board management
-internal/store/sqlite.go         SQLite subscription + config persistence
-internal/webui/server.go         Embedded HTTP server, REST API, SSE logs
-internal/webui/controller.go     Bot lifecycle management for web UI mode
-internal/webui/loghandler.go     Multi-handler slog (stdout + web buffer)
-internal/webui/static/           Embedded web dashboard (go:embed)
-android/                         Kotlin Android wrapper (WebView + foreground service)
+internal/mg/                     Magic Garden protocol (55 tests)
+internal/notify/                 Notification engine (8 tests)
+internal/discord/                Discord session, commands, stock boards
+internal/store/                  SQLite persistence (21 tests)
+internal/webui/                  Web UI server + REST API (29 tests)
+android/                         Kotlin Android wrapper
+.github/workflows/               CI (test + build) and release automation
+Makefile                         Build, test, lint, android targets
 ```
 
 ## Documentation
