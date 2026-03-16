@@ -251,7 +251,7 @@ func (c *Client) handleWelcome(raw json.RawMessage) {
 
 			var restocks []StockChange
 			for _, ch := range changes {
-				if ch.NewStock > 0 {
+				if ch.OldStock == 0 && ch.NewStock > 0 {
 					restocks = append(restocks, ch)
 				}
 			}
@@ -263,6 +263,8 @@ func (c *Client) handleWelcome(raw json.RawMessage) {
 }
 
 // diffShopState compares two shop snapshots and returns stock changes.
+// Only items that existed in the old state are compared; new items are ignored
+// to avoid phantom 0→N changes that would trigger false restock alerts.
 func diffShopState(old, new map[string]*Shop) []StockChange {
 	var changes []StockChange
 	for shopType, newShop := range new {
@@ -277,7 +279,11 @@ func diffShopState(old, new map[string]*Shop) []StockChange {
 		}
 		for _, item := range newShop.Inventory {
 			id := item.ItemID()
-			prev := oldStock[id]
+			prev, existed := oldStock[id]
+			if !existed {
+				// Item is new to the shop; skip to avoid phantom restock
+				continue
+			}
 			if prev != item.InitialStock {
 				changes = append(changes, StockChange{
 					ShopType: shopType,
