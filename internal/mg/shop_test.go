@@ -17,7 +17,7 @@ func TestApplyPatches_RestockZeroToN(t *testing.T) {
 	})
 
 	changes := state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("3")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("3"))},
 	})
 
 	if len(changes) != 1 {
@@ -44,7 +44,7 @@ func TestApplyPatches_StockDecreaseNotRestock(t *testing.T) {
 	})
 
 	changes := state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("3")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("3"))},
 	})
 
 	if len(changes) != 1 {
@@ -65,7 +65,7 @@ func TestApplyPatches_NoChangeNoEvent(t *testing.T) {
 	})
 
 	changes := state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("5")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("5"))},
 	})
 
 	if len(changes) != 0 {
@@ -82,7 +82,7 @@ func TestApplyPatches_SellOutZero(t *testing.T) {
 	})
 
 	changes := state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/egg/inventory/0/initialStock", Value: json.Number("0")},
+		{Op: "replace", Path: "/child/data/shops/egg/inventory/0/initialStock", Value: json.RawMessage([]byte("0"))},
 	})
 
 	if len(changes) != 1 {
@@ -105,8 +105,8 @@ func TestApplyPatches_MultipleShops(t *testing.T) {
 	})
 
 	changes := state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("5")},
-		{Op: "replace", Path: "/child/data/shops/egg/inventory/0/initialStock", Value: json.Number("10")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("5"))},
+		{Op: "replace", Path: "/child/data/shops/egg/inventory/0/initialStock", Value: json.RawMessage([]byte("10"))},
 	})
 
 	if len(changes) != 2 {
@@ -124,7 +124,7 @@ func TestApplyPatches_InvalidIndex(t *testing.T) {
 
 	// Index 99 is out of bounds
 	changes := state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/99/initialStock", Value: json.Number("5")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/99/initialStock", Value: json.RawMessage([]byte("5"))},
 	})
 
 	if len(changes) != 0 {
@@ -139,7 +139,7 @@ func TestApplyPatches_UnknownShop(t *testing.T) {
 	})
 
 	changes := state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/nonexistent/inventory/0/initialStock", Value: json.Number("5")},
+		{Op: "replace", Path: "/child/data/shops/nonexistent/inventory/0/initialStock", Value: json.RawMessage([]byte("5"))},
 	})
 
 	if len(changes) != 0 {
@@ -156,7 +156,7 @@ func TestApplyPatches_InvalidValue(t *testing.T) {
 	})
 
 	changes := state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("notanumber")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("notanumber"))},
 	})
 
 	if len(changes) != 0 {
@@ -176,7 +176,7 @@ func TestApplyPatches_TimerUpdate(t *testing.T) {
 	})
 
 	state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/secondsUntilRestock", Value: json.Number("95")},
+		{Op: "replace", Path: "/child/data/shops/seed/secondsUntilRestock", Value: json.RawMessage([]byte("95"))},
 	})
 
 	shop, ok := state.GetShop("seed")
@@ -199,7 +199,7 @@ func TestApplyPatches_TimerResetDetectsCycle(t *testing.T) {
 
 	// Timer jumps from 5 → 300 = restock cycle reset
 	state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/secondsUntilRestock", Value: json.Number("300")},
+		{Op: "replace", Path: "/child/data/shops/seed/secondsUntilRestock", Value: json.RawMessage([]byte("300"))},
 	})
 
 	shop, _ := state.GetShop("seed")
@@ -218,7 +218,7 @@ func TestApplyPatches_TimerCountdownDoesNotResetCycle(t *testing.T) {
 	})
 
 	state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/secondsUntilRestock", Value: json.Number("95")},
+		{Op: "replace", Path: "/child/data/shops/seed/secondsUntilRestock", Value: json.RawMessage([]byte("95"))},
 	})
 
 	shop, _ := state.GetShop("seed")

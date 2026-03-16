@@ -2,6 +2,7 @@ package mg
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
 )
 
@@ -34,7 +35,7 @@ func TestServerMessage_Unmarshal_PartialState(t *testing.T) {
 	if msg.Patches[0].Op != "replace" {
 		t.Errorf("expected replace, got %s", msg.Patches[0].Op)
 	}
-	val, _ := msg.Patches[0].Value.Int64()
+	val, _ := strconv.ParseInt(string(msg.Patches[0].Value), 10, 64)
 	if val != 5 {
 		t.Errorf("expected value 5, got %d", val)
 	}
@@ -114,7 +115,7 @@ func TestPatch_Unmarshal(t *testing.T) {
 	if p.Op != "replace" {
 		t.Errorf("expected replace, got %s", p.Op)
 	}
-	f, _ := p.Value.Float64()
+	f, _ := strconv.ParseFloat(string(p.Value), 64)
 	if f != 95.5 {
 		t.Errorf("expected 95.5, got %f", f)
 	}

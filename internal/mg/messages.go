@@ -12,9 +12,9 @@ type ServerMessage struct {
 
 // Patch represents a JSON Patch (RFC 6902) operation.
 type Patch struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value json.Number `json:"value"`
+	Op    string          `json:"op"`
+	Path  string          `json:"path"`
+	Value json.RawMessage `json:"value,omitempty"`
 }
 
 // WelcomeState is the full state received in a Welcome message.

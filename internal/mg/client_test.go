@@ -470,7 +470,7 @@ func TestHandleMessage_RoutesPartialState(t *testing.T) {
 	raw, _ := json.Marshal(ServerMessage{
 		Type: "PartialState",
 		Patches: []Patch{
-			{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("5")},
+			{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("5"))},
 		},
 	})
 	c.handleMessage(raw)
@@ -527,8 +527,8 @@ func TestHandlePartialState_FiresForAnyInStockChange(t *testing.T) {
 	c.OnStockChange(func(changes []StockChange) { allChanges = changes })
 
 	c.handlePartialState([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("3")}, // 0→3 (In stock - NOTIFY)
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/1/initialStock", Value: json.Number("2")}, // 5→2 (In stock - NOTIFY)
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("3"))}, // 0→3 (In stock - NOTIFY)
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/1/initialStock", Value: json.RawMessage([]byte("2"))}, // 5→2 (In stock - NOTIFY)
 	})
 
 	// Verify all changes payload
@@ -567,7 +567,7 @@ func TestHandlePartialState_NoChangesNoCallbacks(t *testing.T) {
 	c.OnStockChange(func(changes []StockChange) { changeCalled = true })
 
 	c.handlePartialState([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("5")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("5"))},
 	})
 
 	if restockCalled {
@@ -588,7 +588,7 @@ func TestHandlePartialState_NilCallbacksSafe(t *testing.T) {
 
 	// No callbacks registered -- must not panic
 	c.handlePartialState([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("5")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("5"))},
 	})
 
 	shop, _ := c.state.GetShop("seed")
@@ -610,7 +610,7 @@ func TestHandlePartialState_OnlyRestockCallbackSet(t *testing.T) {
 	// onStockChange is nil
 
 	c.handlePartialState([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("3")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("3"))},
 	})
 
 	if len(restockPayload) != 1 {
@@ -634,7 +634,7 @@ func TestHandlePartialState_OnlyStockChangeCallbackSet(t *testing.T) {
 	// onRestock is nil
 
 	c.handlePartialState([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("3")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("3"))},
 	})
 
 	if len(changePayload) != 1 {
@@ -665,10 +665,10 @@ func TestShopState_ConcurrentApplyAndRead(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 1000; i++ {
 			state.ApplyPatches([]Patch{
-				{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("5")},
+				{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("5"))},
 			})
 			state.ApplyPatches([]Patch{
-				{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("0")},
+				{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("0"))},
 			})
 		}
 	}()
@@ -708,7 +708,7 @@ func TestApplyPatches_Idempotent(t *testing.T) {
 	})
 
 	patch := []Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("5")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("5"))},
 	}
 
 	changes1 := state.ApplyPatches(patch)
@@ -738,10 +738,10 @@ func TestApplyPatches_MixedValidAndInvalid(t *testing.T) {
 	})
 
 	changes := state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("5")},   // valid
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/99/initialStock", Value: json.Number("3")},  // invalid index
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/1/initialStock", Value: json.Number("abc")}, // invalid value
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/1/initialStock", Value: json.Number("7")},   // valid
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("5"))},   // valid
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/99/initialStock", Value: json.RawMessage([]byte("3"))},  // invalid index
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/1/initialStock", Value: json.RawMessage([]byte("abc"))}, // invalid value
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/1/initialStock", Value: json.RawMessage([]byte("7"))},   // valid
 	})
 
 	if len(changes) != 2 {
@@ -780,7 +780,7 @@ func TestStockChange_ItemInitialStockEqualsNewStock(t *testing.T) {
 	})
 
 	changes := state.ApplyPatches([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("5")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("5"))},
 	})
 
 	if len(changes) != 1 {
@@ -807,5 +807,47 @@ func TestStockChange_ItemInitialStockEqualsNewStock(t *testing.T) {
 	// Document: Item.InitialStock captures the post-mutation value
 	if ch.Item.InitialStock != ch.NewStock {
 		t.Errorf("Item.InitialStock (%d) should equal NewStock (%d)", ch.Item.InitialStock, ch.NewStock)
+	}
+}
+
+func TestHandlePartialState_RemovalsAvoidPhantomRestocks(t *testing.T) {
+	c := testClient(t)
+	// Setup: Bamboo at 0, Carrot at 1, Date at 2
+	c.state.SetFromWelcome(map[string]*Shop{
+		"seed": {Inventory: []ShopItem{
+			{ItemType: "Seed", Species: "Bamboo", InitialStock: 1},
+			{ItemType: "Seed", Species: "Carrot", InitialStock: 5},
+			{ItemType: "Seed", Species: "Date", InitialStock: 3},
+		}},
+	})
+
+	var restockPayload []StockChange
+	c.OnRestock(func(changes []StockChange) { restockPayload = changes })
+
+	// Remove Bamboo (it sold out). Carrot is now at index 0, Date is at index 1.
+	// If the state array didn't update, a replacement on index 0 for 4 stock
+	// would mistakenly trigger an alert for Bamboo going from 1 to 4.
+	// It should instead be a Carrot update 5->4.
+	c.handlePartialState([]Patch{
+		{Op: "remove", Path: "/child/data/shops/seed/inventory/0"},
+	})
+	
+	// Bamboo went to 0, which is not a restock, so restockPayload should be 0 length
+	if len(restockPayload) != 0 {
+		t.Fatalf("Bamboo going to 0 should not be a restock, got %d", len(restockPayload))
+	}
+	
+	c.handlePartialState([]Patch{
+		// Apply to index 0. Because Bamboo was removed, index 0 is now Carrot.
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.RawMessage([]byte("4"))},
+	})
+
+	// Carrot went 5->4. This is a restock since it's an update where stock > 0
+	if len(restockPayload) != 1 {
+		t.Fatalf("onRestock should fire for Carrot: got %d, want 1", len(restockPayload))
+	}
+	ch := restockPayload[0]
+	if ch.Item.ItemID() != "Carrot" || ch.OldStock != 5 || ch.NewStock != 4 {
+		t.Errorf("payload: got %q %d→%d, want Carrot 5→4", ch.Item.ItemID(), ch.OldStock, ch.NewStock)
 	}
 }

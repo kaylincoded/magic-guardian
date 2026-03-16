@@ -1,6 +1,7 @@
 package mg
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -76,6 +77,16 @@ var timerPathRegex = regexp.MustCompile(
 	`^/child/data/shops/(\w+)/secondsUntilRestock$`,
 )
 
+// inventoryArrayRegex matches paths like /child/data/shops/seed/inventory
+var inventoryArrayRegex = regexp.MustCompile(
+	`^/child/data/shops/(\w+)/inventory$`,
+)
+
+// inventoryItemRegex matches paths like /child/data/shops/seed/inventory/3
+var inventoryItemRegex = regexp.MustCompile(
+	`^/child/data/shops/(\w+)/inventory/(\d+)$`,
+)
+
 // ApplyPatches applies a set of PartialState patches and returns any stock changes.
 func (s *ShopState) ApplyPatches(patches []Patch) []StockChange {
 	s.mu.Lock()
@@ -84,46 +95,110 @@ func (s *ShopState) ApplyPatches(patches []Patch) []StockChange {
 	var changes []StockChange
 
 	for _, p := range patches {
-		if m := inventoryPathRegex.FindStringSubmatch(p.Path); m != nil {
-			shopType := m[1]
-			idx, err := strconv.Atoi(m[2])
-			if err != nil {
-				continue
-			}
-			shop, ok := s.shops[shopType]
-			if !ok || idx >= len(shop.Inventory) {
-				continue
-			}
-			newStock, err := strconv.Atoi(string(p.Value))
-			if err != nil {
-				continue
-			}
-			oldStock := shop.Inventory[idx].InitialStock
-			shop.Inventory[idx].InitialStock = newStock
+		if p.Op == "replace" {
+			if m := inventoryPathRegex.FindStringSubmatch(p.Path); m != nil {
+				shopType := m[1]
+				idx, err := strconv.Atoi(m[2])
+				if err != nil {
+					continue
+				}
+				shop, ok := s.shops[shopType]
+				if !ok || idx >= len(shop.Inventory) {
+					continue
+				}
+				newStock, err := strconv.Atoi(string(p.Value))
+				// Sometimes values come boxed in quotes, e.g., "5". Clean them.
+				if err != nil {
+					cleanVal := strings.Trim(string(p.Value), `"`)
+					newStock, err = strconv.Atoi(cleanVal)
+					if err != nil {
+						continue
+					}
+				}
+				oldStock := shop.Inventory[idx].InitialStock
+				shop.Inventory[idx].InitialStock = newStock
 
-			if oldStock != newStock {
-				changes = append(changes, StockChange{
-					ShopType: shopType,
-					Item:     shop.Inventory[idx],
-					OldStock: oldStock,
-					NewStock: newStock,
-				})
+				if oldStock != newStock {
+					changes = append(changes, StockChange{
+						ShopType: shopType,
+						Item:     shop.Inventory[idx],
+						OldStock: oldStock,
+						NewStock: newStock,
+					})
+				}
+			} else if m := timerPathRegex.FindStringSubmatch(p.Path); m != nil {
+				shopType := m[1]
+				shop, ok := s.shops[shopType]
+				if !ok {
+					continue
+				}
+				// Clean potential quotes around the number
+				cleanVal := strings.Trim(string(p.Value), `"`)
+				val, err := strconv.ParseFloat(cleanVal, 64)
+				if err != nil {
+					continue
+				}
+				// Detect timer reset: new value jumps above old value = fresh cycle
+				if val > shop.SecondsUntilRestock+10 {
+					shop.RestockCycle = val
+				}
+				shop.SecondsUntilRestock = val
+			} else if m := inventoryArrayRegex.FindStringSubmatch(p.Path); m != nil {
+				// Whole inventory replaced
+				shopType := m[1]
+				shop, ok := s.shops[shopType]
+				if !ok {
+					continue
+				}
+				var newInventory []ShopItem
+				if err := json.Unmarshal(p.Value, &newInventory); err == nil {
+					oldShop := *shop
+					oldShop.Inventory = make([]ShopItem, len(shop.Inventory))
+					copy(oldShop.Inventory, shop.Inventory)
+					
+					shop.Inventory = newInventory
+					
+					// Compute differences
+					newShops := map[string]*Shop{shopType: shop}
+					oldShops := map[string]*Shop{shopType: &oldShop}
+					changes = append(changes, diffShopState(oldShops, newShops)...)
+				}
 			}
-		} else if m := timerPathRegex.FindStringSubmatch(p.Path); m != nil {
-			shopType := m[1]
-			shop, ok := s.shops[shopType]
-			if !ok {
-				continue
+		} else if p.Op == "remove" {
+			if m := inventoryItemRegex.FindStringSubmatch(p.Path); m != nil {
+				shopType := m[1]
+				idx, err := strconv.Atoi(m[2])
+				if err == nil {
+					shop, ok := s.shops[shopType]
+					if ok && idx >= 0 && idx < len(shop.Inventory) {
+						// Remove the item from slice
+						item := shop.Inventory[idx]
+						shop.Inventory = append(shop.Inventory[:idx], shop.Inventory[idx+1:]...)
+						
+						changes = append(changes, StockChange{
+							ShopType: shopType,
+							Item:     item,
+							OldStock: item.InitialStock,
+							NewStock: 0,
+						})
+					}
+				}
 			}
-			val, err := p.Value.Float64()
-			if err != nil {
-				continue
+		} else if p.Op == "add" {
+			if m := inventoryItemRegex.FindStringSubmatch(p.Path); m != nil {
+				shopType := m[1]
+				idx, err := strconv.Atoi(m[2])
+				if err == nil {
+					shop, ok := s.shops[shopType]
+					if ok && idx >= 0 && idx <= len(shop.Inventory) {
+						var newItem ShopItem
+						if err := json.Unmarshal(p.Value, &newItem); err == nil {
+							// Insert into slice
+							shop.Inventory = append(shop.Inventory[:idx], append([]ShopItem{newItem}, shop.Inventory[idx:]...)...)
+						}
+					}
+				}
 			}
-			// Detect timer reset: new value jumps above old value = fresh cycle
-			if val > shop.SecondsUntilRestock+10 {
-				shop.RestockCycle = val
-			}
-			shop.SecondsUntilRestock = val
 		}
 	}
 
