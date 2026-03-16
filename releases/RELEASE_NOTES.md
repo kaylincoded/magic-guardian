@@ -1,63 +1,39 @@
-# Magic Guardian v0.1.0 - Initial Release
+## What's New
 
-A Discord bot that monitors Magic Garden game shop stock in real-time and notifies users when items are back in stock.
+### Bug Fixes
+- **Fix false restock notifications**: The bot now correctly shifts its internal shop inventory when an item completely sells out, preventing subsequent stock updates from misaligning and firing phantom restocks.
+- **Fix phantom restock for new items**: When the game adds new items to a shop, they no longer falsely appear as 0→N restocks.
+- **Fix Android DNS resolution**: Removed `netgo` build tag so the Go binary uses Android's native DNS resolver.
+- **Fix Android binary crash (SIGILL)**: Go binary correctly cross-compiled as PIE executable with `GOOS=android`.
+- **Fix status bar overlap**: CSS `safe-area-inset-top` keeps header below Android system bar.
+- **Fix port conflict**: Web UI server exits immediately if the port is already in use.
+- **Fix header spacing**: Logo-to-title and status indicator gaps render correctly at all screen densities.
 
-## Features
+### Test Suite (112 tests)
+- Full unit + integration tests across 5 packages
+- Race detector clean
+- Outcome-based assertions (verify payload field values, not just counts)
+- Regression tests for both reported bugs
 
-- **Stock Monitoring**: Tracks seed, tool, egg, and decor shops
-- **Discord Notifications**: DM alerts when watched items restock
-- **Interactive Commands**:
-  - `/subscribe <item>` - Get notified when an item is in stock
-  - `/unsubscribe <item>` - Stop notifications for an item
-  - `/watchlist` - Show your current subscriptions
-  - `/stock [shop]` - Show current shop inventory
-  - `/restock` - Show time until next restock
-  - `/setup-stock-board` - Create a live stock board channel
+### CI/CD Pipeline
+- GitHub Actions CI: test + build on every push/PR
+- GitHub Actions Release: automated builds for all 7 platforms on version tags
+- All actions updated to latest versions (checkout v6, setup-go v6, upload-artifact v7)
 
-## Quick Start
+### UI
+- shadcn green preset dark theme across all UI elements
+- Flux-style toasts with happy/sad mac icons
 
-### Prerequisites
+### Downloads
 
-- Go 1.25+
-- Discord Bot Token
-- Discord Application ID
+| Platform | File |
+|----------|------|
+| Linux x86_64 | `magic-guardian-linux-amd64` |
+| Linux ARM64 | `magic-guardian-linux-arm64` |
+| macOS Intel | `magic-guardian-darwin-amd64` |
+| macOS Apple Silicon | `magic-guardian-darwin-arm64` |
+| Windows x86_64 | `magic-guardian-windows-amd64.exe` |
+| Android ARM64 (bare binary) | `magic-guardian-android-arm64` |
+| Android APK | `magic-guardian-android.apk` |
 
-### Setup
-
-1. **Create a Discord Bot**:
-   - Go to [Discord Developer Portal](https://discord.com/developers/applications)
-   - Create a new application and bot
-   - Copy the Bot Token and Application ID
-   - Enable "Message Content Intent" in Bot settings
-
-2. **Run the bot**:
-
-```bash
-# Linux/macOS
-./magic-guardian-linux-amd64
-./magic-guardian-darwin-arm64  # for Apple Silicon Macs
-
-# Windows
-magic-guardian-windows-amd64.exe
-```
-
-3. **Configure Environment Variables** (or use `.env` file):
-
-```bash
-DISCORD_TOKEN=your_bot_token_here
-DISCORD_APP_ID=your_app_id_here
-```
-
-4. **Invite the Bot**:
-   - Generate an invite URL with appropriate permissions
-   - The bot needs: Send Messages, Manage Channels, Embed Links
-
-## Downloads
-
-| Platform | Architecture | File |
-|----------|-------------|------|
-| macOS | Intel (x86_64) | `magic-guardian-darwin-amd64` |
-| macOS | Apple Silicon (arm64) | `magic-guardian-darwin-arm64` |
-| Linux | amd64 | `magic-guardian-linux-amd64` |
-| Linux | arm64 | `magic-guardian-linux-arm64` |
-| Windows | amd64 | `magic-guardian-windows-amd64` |
+**Full Changelog**: https://github.com/kaylincoded/magic-guardian/compare/v0.2.0...v0.2.1
