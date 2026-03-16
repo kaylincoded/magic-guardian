@@ -264,7 +264,7 @@ func makeWelcomeJSON(t *testing.T, shops map[string]*Shop) json.RawMessage {
 	return b
 }
 
-func TestHandleWelcome_ReconnectOnlyFiresRestockForZeroToN(t *testing.T) {
+func TestHandleWelcome_ReconnectFiresForAnyInStockChange(t *testing.T) {
 	c := testClient(t)
 	c.state.SetFromWelcome(map[string]*Shop{
 		"seed": {Inventory: []ShopItem{
@@ -284,9 +284,9 @@ func TestHandleWelcome_ReconnectOnlyFiresRestockForZeroToN(t *testing.T) {
 
 	c.handleWelcome(makeWelcomeJSON(t, map[string]*Shop{
 		"seed": {Inventory: []ShopItem{
-			{ItemType: "Seed", Species: "Bamboo", InitialStock: 3}, // 5→3 NOT restock
-			{ItemType: "Seed", Species: "Cactus", InitialStock: 1}, // 3→1 NOT restock
-			{ItemType: "Seed", Species: "Date", InitialStock: 5},   // 0→5 IS restock
+			{ItemType: "Seed", Species: "Bamboo", InitialStock: 3}, // 5→3 (In stock - NOTIFY)
+			{ItemType: "Seed", Species: "Cactus", InitialStock: 1}, // 3→1 (In stock - NOTIFY)
+			{ItemType: "Seed", Species: "Date", InitialStock: 5},   // 0→5 (In stock - NOTIFY)
 		}, SecondsUntilRestock: 200},
 	}))
 
@@ -299,26 +299,28 @@ func TestHandleWelcome_ReconnectOnlyFiresRestockForZeroToN(t *testing.T) {
 		t.Fatalf("onStockChange: got %d changes, want 3", len(stockChanges))
 	}
 
-	// Verify restock payload: exactly 1, and it's Date with correct fields
-	if len(restockPayload) != 1 {
-		t.Fatalf("onRestock: got %d, want 1", len(restockPayload))
+	// Verify restock payload: all 3 items (any in-stock change triggers)
+	if len(restockPayload) != 3 {
+		t.Fatalf("onRestock: got %d, want 3", len(restockPayload))
 	}
-	r := restockPayload[0]
-	if r.Item.ItemID() != "Date" {
-		t.Errorf("restock item: got %q, want Date", r.Item.ItemID())
+
+	byItem := make(map[string]StockChange)
+	for _, ch := range restockPayload {
+		byItem[ch.Item.ItemID()] = ch
 	}
-	if r.ShopType != "seed" {
-		t.Errorf("restock ShopType: got %q, want seed", r.ShopType)
+
+	if ch := byItem["Bamboo"]; ch.OldStock != 5 || ch.NewStock != 3 {
+		t.Errorf("Bamboo: got %d→%d, want 5→3", ch.OldStock, ch.NewStock)
 	}
-	if r.OldStock != 0 {
-		t.Errorf("restock OldStock: got %d, want 0", r.OldStock)
+	if ch := byItem["Cactus"]; ch.OldStock != 3 || ch.NewStock != 1 {
+		t.Errorf("Cactus: got %d→%d, want 3→1", ch.OldStock, ch.NewStock)
 	}
-	if r.NewStock != 5 {
-		t.Errorf("restock NewStock: got %d, want 5", r.NewStock)
+	if ch := byItem["Date"]; ch.OldStock != 0 || ch.NewStock != 5 {
+		t.Errorf("Date: got %d→%d, want 0→5", ch.OldStock, ch.NewStock)
 	}
 }
 
-func TestHandleWelcome_NoRestockWhenStockOnlyFluctuates(t *testing.T) {
+func TestHandleWelcome_FiresRestockWhenStockFluctuates(t *testing.T) {
 	c := testClient(t)
 	c.state.SetFromWelcome(map[string]*Shop{
 		"seed": {Inventory: []ShopItem{
@@ -327,8 +329,8 @@ func TestHandleWelcome_NoRestockWhenStockOnlyFluctuates(t *testing.T) {
 		}, SecondsUntilRestock: 100},
 	})
 
-	var restockCalled bool
-	c.OnRestock(func(changes []StockChange) { restockCalled = true })
+	var restockPayload []StockChange
+	c.OnRestock(func(changes []StockChange) { restockPayload = changes })
 	c.onConnect = func() {}
 
 	c.handleWelcome(makeWelcomeJSON(t, map[string]*Shop{
@@ -338,8 +340,8 @@ func TestHandleWelcome_NoRestockWhenStockOnlyFluctuates(t *testing.T) {
 		}, SecondsUntilRestock: 200},
 	}))
 
-	if restockCalled {
-		t.Error("onRestock should NOT fire when stock only fluctuates (N→M, not 0→N)")
+	if len(restockPayload) != 2 {
+		t.Errorf("onRestock: got %d changes, want 2 (any in-stock change triggers)", len(restockPayload))
 	}
 }
 
@@ -510,7 +512,7 @@ func TestHandleMessage_CaseSensitiveRouting(t *testing.T) {
 
 // --- Integration: handlePartialState ---
 
-func TestHandlePartialState_OnlyFiresRestockForZeroToN(t *testing.T) {
+func TestHandlePartialState_FiresForAnyInStockChange(t *testing.T) {
 	c := testClient(t)
 	c.state.SetFromWelcome(map[string]*Shop{
 		"seed": {Inventory: []ShopItem{
@@ -525,8 +527,8 @@ func TestHandlePartialState_OnlyFiresRestockForZeroToN(t *testing.T) {
 	c.OnStockChange(func(changes []StockChange) { allChanges = changes })
 
 	c.handlePartialState([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("3")}, // 0→3 restock
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/1/initialStock", Value: json.Number("2")}, // 5→2 NOT restock
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("3")}, // 0→3 (In stock - NOTIFY)
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/1/initialStock", Value: json.Number("2")}, // 5→2 (In stock - NOTIFY)
 	})
 
 	// Verify all changes payload
@@ -534,32 +536,21 @@ func TestHandlePartialState_OnlyFiresRestockForZeroToN(t *testing.T) {
 		t.Fatalf("onStockChange: got %d, want 2", len(allChanges))
 	}
 
-	// Verify restock payload
-	if len(restockPayload) != 1 {
-		t.Fatalf("onRestock: got %d, want 1", len(restockPayload))
-	}
-	r := restockPayload[0]
-	if r.Item.ItemID() != "Bamboo" {
-		t.Errorf("restock item: got %q, want Bamboo", r.Item.ItemID())
-	}
-	if r.ShopType != "seed" {
-		t.Errorf("restock ShopType: got %q, want seed", r.ShopType)
-	}
-	if r.OldStock != 0 {
-		t.Errorf("restock OldStock: got %d, want 0", r.OldStock)
-	}
-	if r.NewStock != 3 {
-		t.Errorf("restock NewStock: got %d, want 3", r.NewStock)
+	// Verify restock payload: both items should be here now
+	if len(restockPayload) != 2 {
+		t.Fatalf("onRestock: got %d, want 2", len(restockPayload))
 	}
 
-	// Verify non-restock change has correct payload too
 	byItem := make(map[string]StockChange)
-	for _, ch := range allChanges {
+	for _, ch := range restockPayload {
 		byItem[ch.Item.ItemID()] = ch
 	}
-	carrot := byItem["Carrot"]
-	if carrot.OldStock != 5 || carrot.NewStock != 2 {
-		t.Errorf("Carrot change: got %d→%d, want 5→2", carrot.OldStock, carrot.NewStock)
+
+	if ch := byItem["Bamboo"]; ch.OldStock != 0 || ch.NewStock != 3 {
+		t.Errorf("Bamboo: got %d→%d, want 0→3", ch.OldStock, ch.NewStock)
+	}
+	if ch := byItem["Carrot"]; ch.OldStock != 5 || ch.NewStock != 2 {
+		t.Errorf("Carrot: got %d→%d, want 5→2", ch.OldStock, ch.NewStock)
 	}
 }
 
@@ -610,7 +601,7 @@ func TestHandlePartialState_OnlyRestockCallbackSet(t *testing.T) {
 	c := testClient(t)
 	c.state.SetFromWelcome(map[string]*Shop{
 		"seed": {Inventory: []ShopItem{
-			{ItemType: "Seed", Species: "Bamboo", InitialStock: 0},
+			{ItemType: "Seed", Species: "Bamboo", InitialStock: 5},
 		}},
 	})
 
@@ -619,14 +610,14 @@ func TestHandlePartialState_OnlyRestockCallbackSet(t *testing.T) {
 	// onStockChange is nil
 
 	c.handlePartialState([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("5")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("3")},
 	})
 
 	if len(restockPayload) != 1 {
 		t.Fatalf("onRestock should fire: got %d, want 1", len(restockPayload))
 	}
-	if restockPayload[0].OldStock != 0 || restockPayload[0].NewStock != 5 {
-		t.Errorf("payload: got %d→%d, want 0→5", restockPayload[0].OldStock, restockPayload[0].NewStock)
+	if restockPayload[0].OldStock != 5 || restockPayload[0].NewStock != 3 {
+		t.Errorf("payload: got %d→%d, want 5→3", restockPayload[0].OldStock, restockPayload[0].NewStock)
 	}
 }
 
@@ -634,7 +625,7 @@ func TestHandlePartialState_OnlyStockChangeCallbackSet(t *testing.T) {
 	c := testClient(t)
 	c.state.SetFromWelcome(map[string]*Shop{
 		"seed": {Inventory: []ShopItem{
-			{ItemType: "Seed", Species: "Bamboo", InitialStock: 0},
+			{ItemType: "Seed", Species: "Bamboo", InitialStock: 5},
 		}},
 	})
 
@@ -643,15 +634,15 @@ func TestHandlePartialState_OnlyStockChangeCallbackSet(t *testing.T) {
 	// onRestock is nil
 
 	c.handlePartialState([]Patch{
-		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("5")},
+		{Op: "replace", Path: "/child/data/shops/seed/inventory/0/initialStock", Value: json.Number("3")},
 	})
 
 	if len(changePayload) != 1 {
 		t.Fatalf("onStockChange should fire: got %d, want 1", len(changePayload))
 	}
 	ch := changePayload[0]
-	if ch.Item.ItemID() != "Bamboo" || ch.OldStock != 0 || ch.NewStock != 5 || ch.ShopType != "seed" {
-		t.Errorf("payload: got item=%q shop=%q %d→%d, want Bamboo seed 0→5",
+	if ch.Item.ItemID() != "Bamboo" || ch.OldStock != 5 || ch.NewStock != 3 || ch.ShopType != "seed" {
+		t.Errorf("payload: got item=%q shop=%q %d→%d, want Bamboo seed 5→3",
 			ch.Item.ItemID(), ch.ShopType, ch.OldStock, ch.NewStock)
 	}
 }

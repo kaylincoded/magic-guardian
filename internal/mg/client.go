@@ -249,9 +249,10 @@ func (c *Client) handleWelcome(raw json.RawMessage) {
 				c.onStockChange(changes)
 			}
 
+			// Notify subscribers about all items currently in stock that changed value
 			var restocks []StockChange
 			for _, ch := range changes {
-				if ch.OldStock == 0 && ch.NewStock > 0 {
+				if ch.NewStock > 0 {
 					restocks = append(restocks, ch)
 				}
 			}
@@ -303,7 +304,7 @@ func (c *Client) handlePartialState(patches []Patch) {
 		return
 	}
 
-	// Filter to only "now in stock" events (0 → N)
+	// Filter to all items currently in stock that changed value
 	var restocks []StockChange
 	for _, ch := range changes {
 		c.logger.Info("stock change",
@@ -312,7 +313,7 @@ func (c *Client) handlePartialState(patches []Patch) {
 			"old", ch.OldStock,
 			"new", ch.NewStock,
 		)
-		if ch.OldStock == 0 && ch.NewStock > 0 {
+		if ch.NewStock > 0 {
 			restocks = append(restocks, ch)
 		}
 	}
