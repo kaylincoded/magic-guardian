@@ -11,10 +11,11 @@ import (
 
 // StockChange represents a detected inventory transition.
 type StockChange struct {
-	ShopType string
-	Item     ShopItem
-	OldStock int
-	NewStock int
+	ShopType  string
+	Item      ShopItem
+	OldStock  int
+	NewStock  int
+	IsRestock bool // true if this is from a shop restock event (timer reset)
 }
 
 // ShopState holds the current in-memory state of all shops.
@@ -87,6 +88,11 @@ var inventoryItemRegex = regexp.MustCompile(
 	`^/child/data/shops/(\w+)/inventory/(\d+)$`,
 )
 
+// shopEntryRegex matches paths like /child/data/shops/tool (whole shop object replacement)
+var shopEntryRegex = regexp.MustCompile(
+	`^/child/data/shops/(seed|tool|egg|decor)$`,
+)
+
 // ApplyPatches applies a set of PartialState patches and returns any stock changes.
 func (s *ShopState) ApplyPatches(patches []Patch) []StockChange {
 	s.mu.Lock()
@@ -141,10 +147,24 @@ func (s *ShopState) ApplyPatches(patches []Patch) []StockChange {
 				// Detect timer reset: new value jumps above old value = fresh cycle
 				if val > shop.SecondsUntilRestock+10 {
 					shop.RestockCycle = val
+					// On restock, include ALL in-stock items from this shop
+					// This ensures users get notified about items they're subscribed to
+					// even if the stock didn't change (e.g., was already 3, still 3)
+					for _, item := range shop.Inventory {
+						if item.InitialStock > 0 {
+							changes = append(changes, StockChange{
+								ShopType:  shopType,
+								Item:      item,
+								OldStock:  item.InitialStock, // same as new, but marks as "in stock"
+								NewStock:  item.InitialStock,
+								IsRestock: true, // flag to indicate this is a restock notification
+							})
+						}
+					}
 				}
 				shop.SecondsUntilRestock = val
 			} else if m := inventoryArrayRegex.FindStringSubmatch(p.Path); m != nil {
-				// Whole inventory replaced
+				// Whole inventory array replaced
 				shopType := m[1]
 				shop, ok := s.shops[shopType]
 				if !ok {
@@ -155,12 +175,36 @@ func (s *ShopState) ApplyPatches(patches []Patch) []StockChange {
 					oldShop := *shop
 					oldShop.Inventory = make([]ShopItem, len(shop.Inventory))
 					copy(oldShop.Inventory, shop.Inventory)
-					
+
 					shop.Inventory = newInventory
-					
+
 					// Compute differences
 					newShops := map[string]*Shop{shopType: shop}
 					oldShops := map[string]*Shop{shopType: &oldShop}
+					changes = append(changes, diffShopState(oldShops, newShops)...)
+				}
+			} else if m := shopEntryRegex.FindStringSubmatch(p.Path); m != nil {
+				// Whole shop object replaced (e.g., /child/data/shops/tool)
+				shopType := m[1]
+				oldShop, hadOld := s.shops[shopType]
+				var oldShopCopy *Shop
+				if hadOld {
+					cp := *oldShop
+					cp.Inventory = make([]ShopItem, len(oldShop.Inventory))
+					copy(cp.Inventory, oldShop.Inventory)
+					oldShopCopy = &cp
+				}
+
+				var newShop Shop
+				if err := json.Unmarshal(p.Value, &newShop); err == nil {
+					s.shops[shopType] = &newShop
+
+					// Compute differences
+					newShops := map[string]*Shop{shopType: &newShop}
+					oldShops := map[string]*Shop{}
+					if oldShopCopy != nil {
+						oldShops[shopType] = oldShopCopy
+					}
 					changes = append(changes, diffShopState(oldShops, newShops)...)
 				}
 			}
@@ -174,7 +218,7 @@ func (s *ShopState) ApplyPatches(patches []Patch) []StockChange {
 						// Remove the item from slice
 						item := shop.Inventory[idx]
 						shop.Inventory = append(shop.Inventory[:idx], shop.Inventory[idx+1:]...)
-						
+
 						changes = append(changes, StockChange{
 							ShopType: shopType,
 							Item:     item,

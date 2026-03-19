@@ -19,6 +19,9 @@ magic-guardian/                          # Module: github.com/kaylincoded/magic-
 │   │   ├── messages_test.go            # → 5 tests: JSON unmarshaling
 │   │   ├── shop.go                      # → State management
 │   │   ├── shop_test.go                # → 18 tests: ApplyPatches, timers, format
+│   │   ├── items.go                     # → Static item catalog (seeds, tools, eggs, decor)
+│   │   ├── exclusivity.go               # → Item exclusivity badges
+│   │   ├── exclusivity_test.go         # → Exclusivity tests
 │   │   ├── discover.go                  # → Version discovery
 │   │   └── discover_test.go            # → 2 tests: regex extraction
 │   ├── notify/                          # Notification matching
@@ -187,10 +190,11 @@ type ShopState struct {
 }
 
 type StockChange struct {
-    ShopType string
-    Item     ShopItem
-    OldStock int
-    NewStock int
+    ShopType  string
+    Item      ShopItem
+    OldStock  int
+    NewStock  int
+    IsRestock bool  // true if from shop timer reset
 }
 ```
 

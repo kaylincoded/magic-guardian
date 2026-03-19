@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -86,6 +88,15 @@ func (c *Client) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+
+		// Check if this was an immediate rejection (4800 = room unavailable)
+		// In that case, retry quickly with a new room instead of waiting
+		isImmediateReject := err != nil && strings.Contains(err.Error(), "4800")
+		if isImmediateReject {
+			c.logger.Debug("room unavailable, trying another", "error", err)
+			continue // immediately try a new room
+		}
+
 		c.logger.Warn("disconnected from MG server", "error", err)
 		wait := reconnectWait()
 		c.logger.Info("reconnecting", "wait", wait)
@@ -117,7 +128,11 @@ func (c *Client) authenticate(ctx context.Context, playerID string) error {
 	}
 	defer resp.Body.Close()
 
-	c.logger.Info("authenticate-web response", "status", resp.StatusCode)
+	respBody, _ := io.ReadAll(resp.Body)
+	c.logger.Info("authenticate-web response", "status", resp.StatusCode, "body", string(respBody))
+
+	// 400 is expected for anonymous users - the server still allows websocket connection
+	// We only fail on network errors, not HTTP status codes
 	return nil
 }
 
@@ -125,10 +140,10 @@ func (c *Client) connectAndListen(ctx context.Context) error {
 	playerID := fmt.Sprintf("p_%s", randomID(16))
 	wsURL := c.buildURLWithPlayer(playerID)
 
-	// Authenticate before WebSocket connection
-	if err := c.authenticate(ctx, playerID); err != nil {
-		return fmt.Errorf("authenticate: %w", err)
-	}
+	// Skip authentication for anonymous connections - the websocket URL includes
+	// anonymousUserStyle which tells the server we're connecting anonymously.
+	// The authenticate-web endpoint requires a provider (discord/apple/jwt) which
+	// we don't have as an anonymous observer.
 
 	c.logger.Info("connecting to MG", "url", wsURL)
 
@@ -148,15 +163,13 @@ func (c *Client) connectAndListen(ctx context.Context) error {
 
 	c.logger.Info("connected to MG server")
 
-	// Send initial messages to join the game
-	c.sendJoinMessages(conn)
-
 	// Start heartbeat
 	heartbeatCtx, heartbeatCancel := context.WithCancel(ctx)
 	defer heartbeatCancel()
 	go c.heartbeat(heartbeatCtx, conn)
 
 	// Read messages (30s deadline resets on each message; server pings every ~5s)
+	joinSent := false
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -166,6 +179,7 @@ func (c *Client) connectAndListen(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("read: %w", err)
 		}
+
 		// Handle server text "ping" with "pong" response
 		if string(raw) == "ping" {
 			c.connMu.Lock()
@@ -173,6 +187,13 @@ func (c *Client) connectAndListen(ctx context.Context) error {
 			c.connMu.Unlock()
 			continue
 		}
+
+		// Send join messages after receiving first real message from server
+		if !joinSent {
+			c.sendJoinMessages(conn)
+			joinSent = true
+		}
+
 		c.handleMessage(raw)
 	}
 }
@@ -304,16 +325,21 @@ func (c *Client) handlePartialState(patches []Patch) {
 		return
 	}
 
-	// Filter to all items currently in stock that changed value
+	// Filter to items that should trigger notifications:
+	// - Items with stock changes where NewStock > 0
+	// - Items flagged as IsRestock (all in-stock items when shop timer resets)
 	var restocks []StockChange
 	for _, ch := range changes {
-		c.logger.Info("stock change",
-			"shop", ch.ShopType,
-			"item", ch.Item.ItemID(),
-			"old", ch.OldStock,
-			"new", ch.NewStock,
-		)
-		if ch.NewStock > 0 {
+		// Only log actual changes, not restock notifications for unchanged items
+		if ch.OldStock != ch.NewStock {
+			c.logger.Info("stock change",
+				"shop", ch.ShopType,
+				"item", ch.Item.ItemID(),
+				"old", ch.OldStock,
+				"new", ch.NewStock,
+			)
+		}
+		if ch.NewStock > 0 || ch.IsRestock {
 			restocks = append(restocks, ch)
 		}
 	}

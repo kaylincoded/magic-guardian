@@ -19,6 +19,7 @@ A Discord bot that monitors Magic Garden shop inventory and sends "in stock" not
   - `/stock [shop]` — browse current shop inventory
   - `/restock` — see time until next restock
   - `/setup-stock-board` — create a live stock board for your server
+  - `/delete-stock-board` — remove the stock board from your server
 - **Batched notifications** — one DM per restock event, not per item
 - **SQLite persistence** — subscriptions survive restarts
 - **Auto-reconnect** — recovers from WebSocket disconnects
@@ -185,7 +186,7 @@ Permissions needed: **Manage Channels, Manage Messages, Embed Links, View Channe
 
 ```
 cmd/magic-guardian/main.go       Entry point (headless + web UI modes)
-internal/mg/                     Magic Garden protocol (55 tests)
+internal/mg/                     Magic Garden protocol + item catalog
 internal/notify/                 Notification engine (8 tests)
 internal/discord/                Discord session, commands, stock boards
 internal/store/                  SQLite persistence (21 tests)
@@ -211,7 +212,7 @@ Or browse the [full documentation index](./docs/index.md).
 1. Connects to `wss://magicgarden.gg` as an anonymous player
 2. Receives `Welcome` message with full shop inventory + restock timers
 3. Monitors `PartialState` patches (JSON Patch RFC 6902) every ~1s
-4. When `initialStock` changes from 0 → N, the item is "now in stock"
+4. When a shop restocks (timer resets), all in-stock items trigger notifications
 5. Matches against user subscriptions and sends batched Discord DMs
 
 ## License

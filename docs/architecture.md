@@ -188,6 +188,7 @@ The Android app is a thin Kotlin wrapper that runs the Go binary as a foreground
 | `/stock` | Show shop inventory | `shop` (seed/tool/egg/decor) |
 | `/restock` | Show time until next restock | - |
 | `/setup-stock-board` | Create live stock board | `name` (optional) |
+| `/delete-stock-board` | Remove stock board | - |
 
 ### Notification Engine (`internal/notify/engine.go`)
 
@@ -231,13 +232,13 @@ HandleRestocks(changes)
 ### Restock Notification
 
 ```
-WebSocket → PartialState patch
+WebSocket → PartialState patch (timer reset detected)
     ↓
-ShopState.ApplyPatches() detects 0→N change
+ShopState.ApplyPatches() includes ALL in-stock items from shop
     ↓
 OnRestock callback → notify.Engine
     ↓
-store.GetSubscribersForItem(itemID)
+store.GetSubscribersForItem(itemID) for each item
     ↓
 For each subscriber:
     bot.SendStockAlert(userID, batchedChanges)

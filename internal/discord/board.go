@@ -143,6 +143,64 @@ func (bd *Board) SetupBoard(guildID, categoryName string) (string, error) {
 	return firstChannelID, nil
 }
 
+// DeleteBoard removes the stock board channels and category for a guild.
+// Returns the number of channels deleted.
+func (bd *Board) DeleteBoard(guildID string) (int, error) {
+	cfg, err := bd.store.GetBoardConfig(guildID)
+	if err != nil {
+		return 0, fmt.Errorf("get board config: %w", err)
+	}
+	if cfg == nil || len(cfg.Channels) == 0 {
+		return 0, nil
+	}
+
+	var categoryID string
+	deleted := 0
+
+	// Delete each shop channel and find the category
+	for _, channelID := range cfg.Channels {
+		ch, err := bd.session.Channel(channelID)
+		if err != nil {
+			bd.logger.Warn("failed to get channel info", "channel", channelID, "error", err)
+			continue
+		}
+		if categoryID == "" && ch.ParentID != "" {
+			categoryID = ch.ParentID
+		}
+
+		// Remove from in-memory maps
+		for _, shopType := range shopOrder {
+			boardKey := fmt.Sprintf("%s:%s:%s", guildID, channelID, shopType)
+			bd.boardIDs.Delete(boardKey)
+			bd.lastUpdates.Delete(boardKey)
+		}
+
+		// Delete the channel
+		if _, err := bd.session.ChannelDelete(channelID); err != nil {
+			bd.logger.Warn("failed to delete channel", "channel", channelID, "error", err)
+		} else {
+			deleted++
+		}
+	}
+
+	// Delete the category if we found it
+	if categoryID != "" {
+		if _, err := bd.session.ChannelDelete(categoryID); err != nil {
+			bd.logger.Warn("failed to delete category", "category", categoryID, "error", err)
+		} else {
+			deleted++
+		}
+	}
+
+	// Remove from database
+	if err := bd.store.DeleteBoardConfig(guildID); err != nil {
+		bd.logger.Error("failed to delete board config", "error", err)
+	}
+
+	bd.logger.Info("stock board deleted", "guild", guildID, "deleted", deleted)
+	return deleted, nil
+}
+
 // UpdateAllBoards edits all board embeds across all guilds with current shop state.
 func (bd *Board) UpdateAllBoards() {
 	configs, err := bd.store.GetAllBoardConfigs()

@@ -49,7 +49,12 @@ func BuildStockAlertEmbed(changes []mg.StockChange) *discordgo.MessageEmbed {
 		var lines []string
 		for _, item := range items {
 			name := mg.FormatItemName(item.Item.ItemID())
-			lines = append(lines, fmt.Sprintf("**%s** — x%d", name, item.NewStock))
+			badge := mg.FormatExclusivityBadge(item.Item.ItemID())
+			if badge != "" {
+				lines = append(lines, fmt.Sprintf("**%s** — x%d %s", name, item.NewStock, badge))
+			} else {
+				lines = append(lines, fmt.Sprintf("**%s** — x%d", name, item.NewStock))
+			}
 		}
 		field := &discordgo.MessageEmbedField{
 			Name:   fmt.Sprintf("%s %s Shop", emoji, cases.Title(language.English).String(shopType)),
@@ -134,10 +139,19 @@ func BuildStockEmbed(shopType string, shop *mg.Shop) *discordgo.MessageEmbed {
 
 	for _, item := range shop.Inventory {
 		name := mg.FormatItemName(item.ItemID())
+		badge := mg.FormatExclusivityBadge(item.ItemID())
 		if item.InitialStock > 0 {
-			inStockLines = append(inStockLines, fmt.Sprintf("✅ **%s** — x%d", name, item.InitialStock))
+			if badge != "" {
+				inStockLines = append(inStockLines, fmt.Sprintf("✅ **%s** — x%d %s", name, item.InitialStock, badge))
+			} else {
+				inStockLines = append(inStockLines, fmt.Sprintf("✅ **%s** — x%d", name, item.InitialStock))
+			}
 		} else {
-			outOfStockLines = append(outOfStockLines, fmt.Sprintf("❌ %s", name))
+			if badge != "" {
+				outOfStockLines = append(outOfStockLines, fmt.Sprintf("❌ %s %s", name, badge))
+			} else {
+				outOfStockLines = append(outOfStockLines, fmt.Sprintf("❌ %s", name))
+			}
 		}
 	}
 
@@ -190,7 +204,12 @@ func BuildWatchlistEmbed(items []WatchlistItem) *discordgo.MessageEmbed {
 		if item.CurrentStock > 0 {
 			status = fmt.Sprintf("✅ x%d in stock", item.CurrentStock)
 		}
-		lines = append(lines, fmt.Sprintf("%s **%s** — %s", emoji, mg.FormatItemName(item.ItemID), status))
+		badge := mg.FormatExclusivityBadge(item.ItemID)
+		if badge != "" {
+			lines = append(lines, fmt.Sprintf("%s **%s** — %s %s", emoji, mg.FormatItemName(item.ItemID), status, badge))
+		} else {
+			lines = append(lines, fmt.Sprintf("%s **%s** — %s", emoji, mg.FormatItemName(item.ItemID), status))
+		}
 	}
 
 	return &discordgo.MessageEmbed{

@@ -5,12 +5,20 @@ BINARY_NAME := magic-guardian
 MAIN_PKG := ./cmd/magic-guardian/
 LDFLAGS := -s -w
 
-# Android NDK (override with: make android-build NDK=/path/to/ndk)
-ANDROID_HOME ?= /opt/homebrew/share/android-commandlinetools
+# Android NDK - auto-detect platform (override with: make android-build NDK=/path/to/ndk)
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    ANDROID_HOME ?= /opt/homebrew/share/android-commandlinetools
+    NDK_HOST := darwin-x86_64
+    JAVA_HOME ?= /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+else
+    ANDROID_HOME ?= $(HOME)/android-sdk
+    NDK_HOST := linux-x86_64
+    JAVA_HOME ?= $(shell find /usr/lib/jvm -maxdepth 1 -type d -name 'java-*-openjdk' | sort -V | tail -1)
+endif
 NDK ?= $(ANDROID_HOME)/ndk/27.2.12479018
-ANDROID_CC := $(NDK)/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android26-clang
-ANDROID_CXX := $(NDK)/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android26-clang++
-JAVA_HOME ?= /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+ANDROID_CC := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST)/bin/aarch64-linux-android26-clang
+ANDROID_CXX := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST)/bin/aarch64-linux-android26-clang++
 
 all: test build
 

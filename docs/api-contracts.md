@@ -179,6 +179,32 @@ VALUES (?, ?, ?, ?)
 
 ---
 
+### `/delete-stock-board`
+
+Remove the stock board channels and category from the server.
+
+**Options:** None
+
+**Behavior:**
+1. Validates command is used in guild (not DM)
+2. Retrieves board configuration from database
+3. Deletes all shop channels
+4. Deletes the category channel
+5. Removes board configuration from database
+6. Clears in-memory board tracking
+
+**Permissions:**
+- Bot needs: Manage Channels
+
+**Database Operations:**
+```sql
+DELETE FROM board_messages WHERE guild_id = ?
+```
+
+**Response:** Ephemeral confirmation with count of deleted channels
+
+---
+
 ## Autocomplete
 
 Items for `/subscribe` and `/unsubscribe` support autocomplete.
@@ -186,23 +212,26 @@ Items for `/subscribe` and `/unsubscribe` support autocomplete.
 **Handler:** `handleAutocomplete()`
 
 **Logic:**
-1. Get all shops from ShopState
-2. For each shop, iterate inventory
-3. Filter items matching query string
-4. Limit to 25 choices (Discord limit)
-5. Include stock status in label
+1. Uses static item catalog (`internal/mg/items.go`) for all subscribable items
+2. For `/subscribe`: shows all items, marks already-subscribed items with "(subscribed)"
+3. For `/unsubscribe`: filters to only show items the user is subscribed to
+4. When no query: shows balanced mix from each shop type (seeds, tools, eggs, decor)
+5. Filter items matching query string
+6. Limit to 25 choices (Discord limit)
 
 **Response Format:**
 ```json
 {
-  "name": "🥚 MythicalEgg [❌ out of stock]",
+  "name": "🥚 Mythical Egg",
   "value": "mythicalegg"
 }
 ```
 
-**Stock Status Indicators:**
-- `✅ x{N}` - Item in stock with quantity
-- `❌` - Out of stock
+**Labels include:**
+- Shop emoji prefix
+- Item display name
+- "(subscribed)" suffix for already-subscribed items in `/subscribe`
+- Exclusivity badge for server/platform-exclusive items
 
 ---
 
@@ -263,15 +292,16 @@ Subscription management on stock boards.
 
 ### Restock Callback (`OnRestock`)
 
-Fires when stock changes from 0 → N.
+Fires when a shop restocks (timer resets) for ALL in-stock items in that shop.
 
-**Trigger:** `client.handlePartialState()` detects `OldStock == 0 && NewStock > 0`
+**Trigger:** `client.handlePartialState()` detects timer reset (new value > old value + 10s)
 
 **Receiver:** `notify.Engine.HandleRestocks()`
 
 **Batch Behavior:**
-- Multiple restocks in same tick → single DM per user
-- User receives list of all restocked items they watch
+- All in-stock items from the restocking shop are included
+- Multiple shops restocking → single DM per user
+- User receives list of all subscribed items currently in stock
 
 ---
 

@@ -117,6 +117,11 @@ func (b *Bot) Start() error {
 				},
 			},
 		},
+		{
+			Name:                     "delete-stock-board",
+			Description:              "Delete the stock board channels and category",
+			DefaultMemberPermissions: &adminPerm,
+		},
 	}
 
 	_, err := b.session.ApplicationCommandBulkOverwrite(b.appID, "", commands)
@@ -266,6 +271,8 @@ func (b *Bot) handleCommand(s *discordgo.Session, i *discordgo.InteractionCreate
 		b.cmdRestock(s, i)
 	case "setup-stock-board":
 		b.cmdSetupStockBoard(s, i)
+	case "delete-stock-board":
+		b.cmdDeleteStockBoard(s, i)
 	}
 }
 
@@ -293,6 +300,13 @@ func (b *Bot) cmdSubscribe(s *discordgo.Session, i *discordgo.InteractionCreate)
 	name := mg.FormatItemName(itemRaw)
 	if !created {
 		b.respond(s, i, fmt.Sprintf("ℹ️ You're already subscribed to **%s**.", name))
+		return
+	}
+
+	// Add exclusivity warning if applicable
+	exclusivityNote := mg.FormatExclusivityDetail(itemID, guildID)
+	if exclusivityNote != "" {
+		b.respond(s, i, fmt.Sprintf("✅ Subscribed to **%s**! You'll be DM'd when it's in stock.\n\n%s", name, exclusivityNote))
 		return
 	}
 	b.respond(s, i, fmt.Sprintf("✅ Subscribed to **%s**! You'll be DM'd when it's in stock.", name))
@@ -456,6 +470,41 @@ func (b *Bot) cmdSetupStockBoard(s *discordgo.Session, i *discordgo.InteractionC
 	})
 }
 
+func (b *Bot) cmdDeleteStockBoard(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if i.GuildID == "" {
+		b.respond(s, i, "❌ This command can only be used in a server.")
+		return
+	}
+
+	// Defer the response since channel deletion takes a moment
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags: discordgo.MessageFlagsEphemeral,
+		},
+	})
+
+	deleted, err := b.board.DeleteBoard(i.GuildID)
+	if err != nil {
+		b.logger.Error("delete-stock-board failed", "error", err)
+		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: strPtr("❌ Failed to delete stock board. Make sure I have Manage Channels permission."),
+		})
+		return
+	}
+
+	if deleted == 0 {
+		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: strPtr("ℹ️ No stock board found in this server."),
+		})
+		return
+	}
+
+	s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+		Content: strPtr(fmt.Sprintf("✅ Stock board deleted! Removed %d channel(s).", deleted)),
+	})
+}
+
 func strPtr(s string) *string {
 	return &s
 }
@@ -493,35 +542,92 @@ func (b *Bot) handleAutocomplete(s *discordgo.Session, i *discordgo.InteractionC
 
 	query := strings.ToLower(focused.StringValue())
 	var choices []*discordgo.ApplicationCommandOptionChoice
+	commandName := data.Name
+	userID := interactionUserID(i)
 
-	shops := b.mgState.GetAllShops()
-	for _, shopType := range []string{"seed", "tool", "egg", "decor"} {
-		shop, ok := shops[shopType]
-		if !ok {
-			continue
-		}
-		emoji := shopEmoji[shopType]
-		for _, item := range shop.Inventory {
-			id := item.ItemID()
-			name := mg.FormatItemName(id)
-			if query != "" && !strings.Contains(strings.ToLower(name), query) && !strings.Contains(strings.ToLower(id), query) {
+	// Get user's current subscriptions
+	userSubs, _ := b.store.GetUserSubscriptions(userID)
+	subscribedItems := make(map[string]bool)
+	for _, sub := range userSubs {
+		subscribedItems[sub.ItemID] = true
+	}
+
+	// For unsubscribe: only show items user is subscribed to
+	if commandName == "unsubscribe" {
+		for _, sub := range userSubs {
+			item := mg.GetItemByID(sub.ItemID)
+			if item == nil {
 				continue
 			}
-			stock := "❌"
-			if item.InitialStock > 0 {
-				stock = fmt.Sprintf("✅ x%d", item.InitialStock)
+			if query != "" && !strings.Contains(strings.ToLower(item.Name), query) && !strings.Contains(strings.ToLower(item.ID), query) {
+				continue
 			}
-			label := fmt.Sprintf("%s %s [%s]", emoji, name, stock)
+			emoji := shopEmoji[item.ShopType]
+			label := fmt.Sprintf("%s %s", emoji, item.Name)
 			choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
 				Name:  label,
-				Value: strings.ToLower(id),
+				Value: strings.ToLower(item.ID),
 			})
 			if len(choices) >= 25 {
 				break
 			}
 		}
-		if len(choices) >= 25 {
-			break
+
+		if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+			Data: &discordgo.InteractionResponseData{
+				Choices: choices,
+			},
+		}); err != nil {
+			b.logger.Error("autocomplete respond failed", "error", err)
+		}
+		return
+	}
+
+	// For subscribe: show all items, mark already-subscribed ones
+	buildChoice := func(item mg.Item) *discordgo.ApplicationCommandOptionChoice {
+		emoji := shopEmoji[item.ShopType]
+		exclusivity := mg.FormatExclusivityBadgeShort(item.ID)
+		label := fmt.Sprintf("%s %s", emoji, item.Name)
+		if exclusivity != "" {
+			label = fmt.Sprintf("%s %s %s", emoji, item.Name, exclusivity)
+		}
+		if subscribedItems[strings.ToLower(item.ID)] {
+			label += " (subscribed)"
+		}
+		return &discordgo.ApplicationCommandOptionChoice{
+			Name:  label,
+			Value: strings.ToLower(item.ID),
+		}
+	}
+
+	allItems := mg.GetAllItems()
+
+	if query == "" {
+		// No query: show a balanced mix from each shop type
+		perShop := 6 // ~6 per shop type = 24 total, leaving room
+		shopCounts := map[string]int{"seed": 0, "tool": 0, "egg": 0, "decor": 0}
+
+		for _, item := range allItems {
+			if len(choices) >= 25 {
+				break
+			}
+			if shopCounts[item.ShopType] >= perShop {
+				continue
+			}
+			choices = append(choices, buildChoice(item))
+			shopCounts[item.ShopType]++
+		}
+	} else {
+		// With query: filter and show matching items
+		for _, item := range allItems {
+			if !strings.Contains(strings.ToLower(item.Name), query) && !strings.Contains(strings.ToLower(item.ID), query) {
+				continue
+			}
+			choices = append(choices, buildChoice(item))
+			if len(choices) >= 25 {
+				break
+			}
 		}
 	}
 

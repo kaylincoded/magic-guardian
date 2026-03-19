@@ -135,7 +135,7 @@ The project includes a Makefile for common tasks:
 ```bash
 make              # Run tests + build
 make test         # Run all tests
-make test-race    # Run tests with race detector
+make test-race    # Run tests with race detector (123+ tests)
 make test-cover   # Run tests with coverage report
 make test-verbose # Run tests with verbose output + race detector
 make build        # Build the binary
@@ -149,7 +149,7 @@ make clean        # Remove build artifacts
 
 ### Running Tests
 
-The project has 112 tests across 5 packages covering the core engine, notification dispatch, SQLite persistence, and web UI HTTP handlers.
+The project has 123+ tests across 5 packages covering the core engine, notification dispatch, SQLite persistence, and web UI HTTP handlers.
 
 ```bash
 # Run all tests

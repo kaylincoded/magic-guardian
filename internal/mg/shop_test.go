@@ -327,6 +327,115 @@ func TestFormatStock(t *testing.T) {
 	}
 }
 
+// --- Whole shop replacement (tool shop bug fix) ---
+
+func TestApplyPatches_WholeShopReplacement(t *testing.T) {
+	state := NewShopState()
+	state.SetFromWelcome(map[string]*Shop{
+		"tool": {
+			Inventory: []ShopItem{
+				{ItemType: "Tool", ToolID: "WateringCan", InitialStock: 0},
+				{ItemType: "Tool", ToolID: "PlanterPot", InitialStock: 0},
+			},
+			SecondsUntilRestock: 50.0,
+		},
+	})
+
+	// Simulate whole shop object replacement (what the server actually sends for tool shop)
+	newShopJSON := `{
+		"inventory": [
+			{"itemType": "Tool", "toolId": "WateringCan", "initialStock": 3},
+			{"itemType": "Tool", "toolId": "PlanterPot", "initialStock": 2}
+		],
+		"secondsUntilRestock": 600
+	}`
+
+	changes := state.ApplyPatches([]Patch{
+		{Op: "replace", Path: "/child/data/shops/tool", Value: json.RawMessage([]byte(newShopJSON))},
+	})
+
+	// Should detect restocks for both items (0→3 and 0→2)
+	if len(changes) != 2 {
+		t.Fatalf("expected 2 changes for whole shop replacement, got %d", len(changes))
+	}
+
+	// Verify the shop state was updated
+	shop, ok := state.GetShop("tool")
+	if !ok {
+		t.Fatal("tool shop not found after replacement")
+	}
+	if len(shop.Inventory) != 2 {
+		t.Errorf("expected 2 items in inventory, got %d", len(shop.Inventory))
+	}
+	if shop.Inventory[0].InitialStock != 3 {
+		t.Errorf("expected WateringCan stock 3, got %d", shop.Inventory[0].InitialStock)
+	}
+	if shop.Inventory[1].InitialStock != 2 {
+		t.Errorf("expected PlanterPot stock 2, got %d", shop.Inventory[1].InitialStock)
+	}
+}
+
+func TestApplyPatches_WholeShopReplacement_NoChanges(t *testing.T) {
+	state := NewShopState()
+	state.SetFromWelcome(map[string]*Shop{
+		"tool": {
+			Inventory: []ShopItem{
+				{ItemType: "Tool", ToolID: "WateringCan", InitialStock: 3},
+			},
+			SecondsUntilRestock: 50.0,
+		},
+	})
+
+	// Replace with same stock - should not trigger changes
+	newShopJSON := `{
+		"inventory": [
+			{"itemType": "Tool", "toolId": "WateringCan", "initialStock": 3}
+		],
+		"secondsUntilRestock": 600
+	}`
+
+	changes := state.ApplyPatches([]Patch{
+		{Op: "replace", Path: "/child/data/shops/tool", Value: json.RawMessage([]byte(newShopJSON))},
+	})
+
+	if len(changes) != 0 {
+		t.Fatalf("expected no changes when stock is the same, got %d", len(changes))
+	}
+}
+
+func TestApplyPatches_WholeInventoryArrayReplacement(t *testing.T) {
+	state := NewShopState()
+	state.SetFromWelcome(map[string]*Shop{
+		"seed": {
+			Inventory: []ShopItem{
+				{ItemType: "Seed", Species: "Bamboo", InitialStock: 0},
+				{ItemType: "Seed", Species: "Carrot", InitialStock: 5},
+			},
+		},
+	})
+
+	// Simulate inventory array replacement
+	newInventoryJSON := `[
+		{"itemType": "Seed", "species": "Bamboo", "initialStock": 10},
+		{"itemType": "Seed", "species": "Carrot", "initialStock": 5}
+	]`
+
+	changes := state.ApplyPatches([]Patch{
+		{Op: "replace", Path: "/child/data/shops/seed/inventory", Value: json.RawMessage([]byte(newInventoryJSON))},
+	})
+
+	// Should detect restock for Bamboo (0→10), Carrot unchanged
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change for inventory replacement, got %d", len(changes))
+	}
+	if changes[0].Item.Species != "Bamboo" {
+		t.Errorf("expected Bamboo change, got %s", changes[0].Item.Species)
+	}
+	if changes[0].OldStock != 0 || changes[0].NewStock != 10 {
+		t.Errorf("expected 0→10, got %d→%d", changes[0].OldStock, changes[0].NewStock)
+	}
+}
+
 // --- ItemID ---
 
 func TestShopItem_ItemID(t *testing.T) {

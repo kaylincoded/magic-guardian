@@ -210,10 +210,11 @@ func (si ShopItem) ItemID() string {
 
 ```go
 type StockChange struct {
-    ShopType string
-    Item     ShopItem
-    OldStock int
-    NewStock int
+    ShopType  string
+    Item      ShopItem
+    OldStock  int
+    NewStock  int
+    IsRestock bool  // true if from shop timer reset
 }
 ```
 
@@ -222,12 +223,13 @@ type StockChange struct {
 - `Item` - Item that changed
 - `OldStock` - Previous quantity
 - `NewStock` - New quantity
+- `IsRestock` - True when this change is from a shop restock event (timer reset)
 
 **Detection Logic:**
 ```go
-// Restock event: 0 → N
-if ch.OldStock == 0 && ch.NewStock > 0 {
-    // Trigger notifications
+// Restock event: shop timer reset, include ALL in-stock items
+if ch.IsRestock || ch.NewStock > 0 {
+    // Trigger notifications for subscribed items
 }
 
 // Any change
@@ -242,7 +244,7 @@ if ch.OldStock != ch.NewStock {
 
 Maps game item IDs to display names (`shop.go`).
 
-### Seeds (~80 items)
+### Seeds (46 items)
 
 | Item ID | Display Name |
 |---------|-------------|
@@ -263,7 +265,7 @@ var itemDisplayNames = map[string]string{
 
 ---
 
-### Tools (~13 items)
+### Tools (8 items)
 
 | Item ID | Display Name |
 |---------|-------------|
@@ -274,7 +276,7 @@ var itemDisplayNames = map[string]string{
 
 ---
 
-### Eggs (~8 items)
+### Eggs (9 items)
 
 | Item ID | Display Name |
 |---------|-------------|
@@ -287,7 +289,7 @@ var itemDisplayNames = map[string]string{
 
 ---
 
-### Decor (~50 items)
+### Decor (40 items)
 
 | Item ID | Display Name |
 |---------|-------------|
