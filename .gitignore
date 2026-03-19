@@ -4,6 +4,7 @@
 /magic-guardian-linux
 /magic-guardian-linux-debug
 /dist/
+coverage.out
 
 # Android build artifacts
 android/.gradle/
@@ -12,3 +13,9 @@ android/local.properties
 
 # Allow jniLibs (cross-compiled Go binaries for Android)
 !android/app/src/main/jniLibs/**/*.so
+
+# IDE/AI tool directories
+.claude/
+.windsurf/
+.opencode/
+_bmad/
