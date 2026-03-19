@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/kaylincoded/magic-guardian/internal/store"
+	"github.com/kaylincoded/magic-guardian/internal/updater"
 )
 
 //go:embed static/*
@@ -50,6 +52,7 @@ type Server struct {
 	logger     *slog.Logger
 	logBuffer  *LogBuffer
 	server     *http.Server
+	updater    *updater.Checker
 }
 
 // NewServer creates a new web UI server.
@@ -59,6 +62,7 @@ func NewServer(db *store.Store, controller BotController, logger *slog.Logger) *
 		controller: controller,
 		logger:     logger,
 		logBuffer:  NewLogBuffer(200),
+		updater:    updater.NewChecker(),
 	}
 	return s
 }
@@ -93,6 +97,13 @@ func (s *Server) Start(addr string) error {
 	mux.HandleFunc("GET /api/guilds", s.handleGetGuilds)
 	mux.HandleFunc("POST /api/guilds/leave", s.handleLeaveGuild)
 	mux.HandleFunc("GET /api/logs", s.handleLogStream)
+
+	// Update API routes
+	mux.HandleFunc("GET /api/update/check", s.handleUpdateCheck)
+	mux.HandleFunc("POST /api/update/dismiss", s.handleUpdateDismiss)
+	mux.HandleFunc("POST /api/update/download", s.handleUpdateDownload)
+	mux.HandleFunc("POST /api/update/apply", s.handleUpdateApply)
+	mux.HandleFunc("POST /api/update/restart", s.handleUpdateRestart)
 
 	s.server = &http.Server{
 		Addr:    addr,
@@ -371,4 +382,134 @@ func (lb *LogBuffer) Unsubscribe(ch chan string) {
 	lb.mu.Lock()
 	delete(lb.subscribers, ch)
 	lb.mu.Unlock()
+}
+
+// Update handlers
+
+func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	info, err := s.updater.Check(r.Context())
+	if err != nil {
+		s.logger.Error("update check failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to check for updates")
+		return
+	}
+
+	// Check if this version was dismissed
+	dismissed, _ := s.store.GetConfig("dismissed_update_version")
+
+	response := map[string]interface{}{
+		"available":       info.Available,
+		"current_version": info.CurrentVersion,
+		"latest_version":  info.LatestVersion,
+		"download_url":    info.DownloadURL,
+		"release_notes":   info.ReleaseNotes,
+		"published_at":    info.PublishedAt,
+		"dismissed":       dismissed == info.LatestVersion,
+		"is_android":      updater.IsAndroid(),
+	}
+	writeJSON(w, response)
+}
+
+func (s *Server) handleUpdateDismiss(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Version string `json:"version"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Version == "" {
+		writeError(w, http.StatusBadRequest, "version is required")
+		return
+	}
+
+	if err := s.store.SetConfig("dismissed_update_version", req.Version); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save dismissed version")
+		return
+	}
+
+	s.logger.Info("update dismissed", "version", req.Version)
+	writeJSON(w, map[string]string{"status": "dismissed"})
+}
+
+func (s *Server) handleUpdateDownload(w http.ResponseWriter, r *http.Request) {
+	// Get latest release info
+	info, err := s.updater.Check(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to check for updates")
+		return
+	}
+
+	if !info.Available || info.DownloadURL == "" {
+		writeError(w, http.StatusBadRequest, "no update available")
+		return
+	}
+
+	// Get download path
+	destPath, err := updater.GetDownloadPath()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get download path")
+		return
+	}
+
+	s.logger.Info("downloading update", "version", info.LatestVersion, "url", info.DownloadURL)
+
+	// Download the update
+	err = s.updater.Download(r.Context(), info.DownloadURL, destPath, func(downloaded, total int64) {
+		// Could stream progress via SSE, but for now just log
+		if total > 0 {
+			pct := float64(downloaded) / float64(total) * 100
+			s.logger.Debug("download progress", "percent", int(pct))
+		}
+	})
+	if err != nil {
+		s.logger.Error("download failed", "error", err)
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("download failed: %v", err))
+		return
+	}
+
+	s.logger.Info("update downloaded", "version", info.LatestVersion, "path", destPath)
+	writeJSON(w, map[string]string{
+		"status":  "downloaded",
+		"version": info.LatestVersion,
+		"path":    destPath,
+	})
+}
+
+func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
+	destPath, err := updater.GetDownloadPath()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get download path")
+		return
+	}
+
+	s.logger.Info("applying update", "path", destPath)
+
+	// Apply the update (replace binary)
+	if err := updater.ApplyUpdate(destPath); err != nil {
+		s.logger.Error("apply update failed", "error", err)
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to apply update: %v", err))
+		return
+	}
+
+	// Clear dismissed version since we're updating
+	_ = s.store.SetConfig("dismissed_update_version", "")
+
+	s.logger.Info("update applied, restart required")
+	writeJSON(w, map[string]string{
+		"status":  "applied",
+		"message": "Update applied. Please restart the application.",
+	})
+}
+
+// handleUpdateRestart triggers a process restart.
+func (s *Server) handleUpdateRestart(w http.ResponseWriter, r *http.Request) {
+	s.logger.Info("restart requested")
+
+	writeJSON(w, map[string]string{
+		"status": "restarting",
+	})
+
+	// Give time for response to be sent, then exit
+	// The service manager (systemd, Android, etc.) should restart us
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		os.Exit(0)
+	}()
 }

@@ -25,6 +25,7 @@ A Discord bot that monitors Magic Garden shop inventory and sends "in stock" not
 - **Auto-reconnect** — recovers from WebSocket disconnects
 - **Web UI** — browser-based dashboard for configuration and monitoring
 - **Android app** — run the bot from your phone with a native APK
+- **Self-update** — check for updates and install new versions from within the app
 
 ## Screenshots
 
@@ -81,12 +82,12 @@ Pre-built binaries are available on the [releases page](https://github.com/kayli
 
 | Platform | Download Command |
 |----------|------------------|
-| Linux amd64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.1/magic-guardian-linux-amd64` |
-| Linux arm64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.1/magic-guardian-linux-arm64` |
-| macOS Intel | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.1/magic-guardian-darwin-amd64` |
-| macOS Apple Silicon | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.1/magic-guardian-darwin-arm64` |
-| Windows | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.1/magic-guardian-windows-amd64.exe` |
-| Android (APK) | [Download from releases page](https://github.com/kaylincoded/magic-guardian/releases/download/v0.2.1/magic-guardian-android.apk) |
+| Linux amd64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.3.0/magic-guardian-linux-amd64` |
+| Linux arm64 | `wget https://github.com/kaylincoded/magic-guardian/releases/download/v0.3.0/magic-guardian-linux-arm64` |
+| macOS Intel | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.3.0/magic-guardian-darwin-amd64` |
+| macOS Apple Silicon | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.3.0/magic-guardian-darwin-arm64` |
+| Windows | `curl -O https://github.com/kaylincoded/magic-guardian/releases/download/v0.3.0/magic-guardian-windows-amd64.exe` |
+| Android (APK) | [Download from releases page](https://github.com/kaylincoded/magic-guardian/releases/download/v0.3.0/magic-guardian-android.apk) |
 
 **Desktop (Linux/macOS/Windows):** configure and run:
 
@@ -191,6 +192,7 @@ internal/notify/                 Notification engine (8 tests)
 internal/discord/                Discord session, commands, stock boards
 internal/store/                  SQLite persistence (21 tests)
 internal/webui/                  Web UI server + REST API (29 tests)
+internal/updater/                Self-update via GitHub releases
 android/                         Kotlin Android wrapper
 .github/workflows/               CI (test + build) and release automation
 Makefile                         Build, test, lint, android targets

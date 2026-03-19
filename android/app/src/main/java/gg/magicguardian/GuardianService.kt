@@ -58,10 +58,8 @@ class GuardianService : Service() {
             return
         }
 
-        // The binary is packaged as a native library (libguardian.so) in the APK's lib/ directory.
-        // This is the only location where Android allows execution of binaries from an app.
-        val nativeLibDir = applicationContext.applicationInfo.nativeLibraryDir
-        val binaryFile = File(nativeLibDir, "libguardian.so")
+        // Get the binary path - prefer extracted binary (for updates), fallback to APK native lib
+        val binaryFile = getExecutableBinary()
 
         if (!binaryFile.exists()) {
             Log.e(TAG, "Binary not found at ${binaryFile.absolutePath}")
@@ -69,6 +67,7 @@ class GuardianService : Service() {
         }
 
         val dbPath = File(applicationContext.filesDir, "magic-guardian.db").absolutePath
+        val cacheDir = applicationContext.cacheDir.absolutePath
 
         try {
             val pb = ProcessBuilder(
@@ -80,9 +79,15 @@ class GuardianService : Service() {
             )
             pb.directory(applicationContext.filesDir)
             pb.redirectErrorStream(true)
+            
+            // Set environment variables for the updater
+            val env = pb.environment()
+            env["GUARDIAN_BINARY_PATH"] = getUpdatedBinaryPath().absolutePath
+            env["GUARDIAN_CACHE_DIR"] = cacheDir
+            
             process = pb.start()
 
-            // Log output in background thread
+            // Monitor process and restart if it exits
             Thread {
                 try {
                     process?.inputStream?.bufferedReader()?.forEachLine { line ->
@@ -91,12 +96,47 @@ class GuardianService : Service() {
                 } catch (e: Exception) {
                     Log.e(TAG, "Log reader error", e)
                 }
+                
+                // Process ended - check if we should restart
+                val exitCode = try { process?.waitFor() ?: -1 } catch (e: Exception) { -1 }
+                Log.i(TAG, "Binary exited with code $exitCode")
+                process = null
+                
+                // Restart after a short delay (for updates)
+                if (exitCode == 0) {
+                    Log.i(TAG, "Restarting binary in 1 second...")
+                    Thread.sleep(1000)
+                    startBinary()
+                }
             }.start()
 
             Log.i(TAG, "Binary started on port $PORT")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start binary", e)
         }
+    }
+
+    /**
+     * Returns the binary to execute.
+     * Uses APK native lib by default, but prefers updated binary if it exists.
+     */
+    private fun getExecutableBinary(): File {
+        // Check for updated binary first (downloaded via self-update)
+        val updatedBinary = getUpdatedBinaryPath()
+        if (updatedBinary.exists() && updatedBinary.canExecute()) {
+            Log.i(TAG, "Using updated binary: ${updatedBinary.absolutePath}")
+            return updatedBinary
+        }
+        
+        // Default: use the binary from APK's native lib directory (always executable)
+        val nativeLibDir = applicationContext.applicationInfo.nativeLibraryDir
+        val apkBinary = File(nativeLibDir, "libguardian.so")
+        Log.i(TAG, "Using APK binary: ${apkBinary.absolutePath}")
+        return apkBinary
+    }
+
+    private fun getUpdatedBinaryPath(): File {
+        return File(applicationContext.filesDir, "bin/magic-guardian")
     }
 
     private fun stopBinary() {
