@@ -793,12 +793,15 @@ function manualCheckForUpdates() {
     btn.style.opacity = '0.5';
     
     if (info.available) {
-      // Show Update Now button (changes behavior on Android)
+      // Show Update Now button (different behavior per platform)
       var updateBtn = document.getElementById('updateNowBtn');
       updateBtn.style.display = 'block';
       if (info.is_android) {
         updateBtn.textContent = 'Download APK';
         updateBtn.onclick = function() { downloadUpdate(); };
+      } else {
+        updateBtn.textContent = 'View Release';
+        updateBtn.onclick = function() { window.open('https://github.com/kaylincoded/magic-guardian/releases/tag/' + info.latest_version, '_blank'); };
       }
       
       // Also show banner
@@ -836,52 +839,10 @@ function downloadUpdate() {
     return;
   }
 
-  // Desktop: in-app update
-  var bannerBtn = document.getElementById('updateBtn');
-  var aboutBtn = document.getElementById('updateNowBtn');
-  
-  if (bannerBtn) {
-    bannerBtn.disabled = true;
-    bannerBtn.textContent = 'Downloading...';
+  // Desktop: open releases page
+  if (latestVersion) {
+    window.open('https://github.com/kaylincoded/magic-guardian/releases/tag/' + latestVersion, '_blank');
   }
-  if (aboutBtn) {
-    aboutBtn.disabled = true;
-    aboutBtn.textContent = 'Downloading...';
-  }
-  
-  api('POST', '/api/update/download').then(function(res) {
-    if (bannerBtn) bannerBtn.textContent = 'Applying...';
-    if (aboutBtn) aboutBtn.textContent = 'Applying...';
-    return api('POST', '/api/update/apply');
-  }).then(function(res) {
-    // Hide banner and show restart message
-    document.getElementById('updateBanner').classList.remove('visible');
-    if (bannerBtn) bannerBtn.textContent = 'Restarting...';
-    if (aboutBtn) aboutBtn.textContent = 'Restarting...';
-    
-    toast('Update applied!', 'success', 'Restarting in 3 seconds...');
-    
-    // Restart after 3 seconds
-    setTimeout(function() {
-      api('POST', '/api/update/restart').then(function() {
-        // Page will reload when server comes back
-        setTimeout(function() { location.reload(); }, 2000);
-      }).catch(function() {
-        // If restart endpoint fails, just tell user to restart manually
-        toast('Please restart the app manually', 'info');
-      });
-    }, 3000);
-  }).catch(function(e) {
-    toast('Update failed: ' + e.message, 'error');
-    if (bannerBtn) {
-      bannerBtn.disabled = false;
-      bannerBtn.textContent = 'Update';
-    }
-    if (aboutBtn) {
-      aboutBtn.disabled = false;
-      aboutBtn.textContent = 'Update Now';
-    }
-  });
 }
 
 loadConfig();
